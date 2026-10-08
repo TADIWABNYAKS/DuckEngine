@@ -36,11 +36,18 @@ class WorldEnvironment extends Environment{
         FossilRecord.setEnv(this);
     }
 
+    // TADIWA EDIT START: observe active recording without wrapping the ecological loop
     update() {
-// TADIWA EDIT START: completed tick event scope
+        if (!this.lineage.active) return this.updateSimulation();
         this.lineage_event_tick = this.total_ticks + 1;
         try {
-// TADIWA EDIT END: completed tick event scope
+            this.updateSimulation();
+            this.lineage.sample(this.total_ticks);
+        } finally { this.lineage_event_tick = null; }
+    }
+
+    updateSimulation() {
+    // TADIWA EDIT END: observe active recording without wrapping the ecological loop
         var to_remove = [];
         for (var i in this.organisms) {
             var org = this.organisms[i];
@@ -56,10 +63,6 @@ class WorldEnvironment extends Environment{
         if (this.total_ticks % this.data_update_rate == 0) {
             FossilRecord.updateData();
         }
-// TADIWA EDIT START: sample after completed tick
-        this.lineage.sample(this.total_ticks);
-        } finally { this.lineage_event_tick = null; }
-// TADIWA EDIT END: sample after completed tick
     }
 
     render() {
@@ -79,7 +82,7 @@ class WorldEnvironment extends Environment{
         let start_pop = this.organisms.length;
         for (var i of org_indeces.reverse()){
 // TADIWA EDIT START: observe all removals
-            this.lineage.death(this.organisms[i], 'removed from world');
+            if (this.lineage.active) this.lineage.death(this.organisms[i], 'removed from world');
 // TADIWA EDIT END: observe all removals
             this.total_mutability -= this.organisms[i].mutability;
             this.organisms.splice(i, 1);

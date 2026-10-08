@@ -14,11 +14,7 @@ class Organism {
         this.env = env;
         this.lifetime = 0;
         this.food_collected = 0;
-// TADIWA EDIT START: explicit observational identity
         this.living = true;
-        this.lineage_id = null;
-        this.lineage_session = null;
-// TADIWA EDIT END: explicit observational identity
         this.anatomy = new Anatomy(this)
         this.direction = Directions.down; // direction of movement
         this.rotation = Directions.up; // direction of rotation
@@ -106,7 +102,7 @@ class Organism {
                 org.species.addPop();
             }
 // TADIWA EDIT START: successful biological birth
-            if (this.env.lineage) this.env.lineage.birth(this, org);
+            if (this.env.lineage && this.env.lineage.active) this.env.lineage.birth(this, org);
 // TADIWA EDIT END: successful biological birth
         }
         Math.max(this.food_collected -= this.foodNeeded(), 0);
@@ -296,7 +292,7 @@ class Organism {
 
     die() {
 // TADIWA EDIT START: idempotent death observation
-        if (this.env.lineage) this.env.lineage.death(this);
+        if (this.env.lineage && this.env.lineage.active) this.env.lineage.death(this);
 // TADIWA EDIT END: idempotent death observation
         for (var cell of this.anatomy.cells) {
             var real_c = this.c + cell.rotatedCol(this.rotation);

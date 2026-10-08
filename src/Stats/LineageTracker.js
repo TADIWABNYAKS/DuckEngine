@@ -115,6 +115,13 @@ class LineageTracker {
             const data = Snapshot.copy(raw);
             const fail = () => { throw new Error('Invalid lineage archive'); };
             if (data.version !== 1 || !Array.isArray(data.nodes) || !Array.isArray(data.genomes) || !Array.isArray(data.history) || !Array.isArray(data.interventions)) fail();
+            const tick = value => Number.isSafeInteger(value) && value >= 0;
+            if (typeof data.active !== 'boolean' || typeof data.complete !== 'boolean' || !tick(data.living) || !tick(data.peak) || data.peak < data.living || data.peak > data.nodes.length) fail();
+            for (const key of ['peakTick','extinctionTick','endedAtTick']) if (data[key] !== null && !tick(data[key])) fail();
+            if (data.active && data.endedAtTick !== null) fail();
+            if (!data.nodes.length && (data.rootId !== null || data.active || data.genomes.length || data.history.length || data.living)) fail();
+            if (data.nodes.length && (data.peakTick === null || (!data.active && data.endedAtTick === null))) fail();
+            for (const i of data.interventions) if (!tick(i.tick) || typeof i.reason !== 'string') fail();
             const ids = new Map();
             let living = 0;
             for (const n of data.nodes) {
@@ -130,6 +137,16 @@ class LineageTracker {
             for (const form of data.genomes) {
                 if (!form.anatomy || !Array.isArray(form.anatomy.cells) || !form.anatomy.cells.length || !form.brain || !Array.isArray(form.brain.decisions) || !Number.isFinite(form.move_range) || !Number.isFinite(form.mutability)) fail();
                 for (const c of form.anatomy.cells) if (!c.state || !['mouth','producer','mover','killer','armor','eye'].includes(c.state.name) || !Number.isInteger(c.loc_col) || !Number.isInteger(c.loc_row) || (c.state.name === 'eye' && ![0,1,2,3].includes(c.direction))) fail();
+                if (typeof form.brain.independent_eye_decisions !== 'boolean' || !form.brain.decisions.length) fail();
+                const states = form.brain.decisions[0].length;
+                if (!states) fail();
+                for (const eye of form.brain.decisions) {
+                    if (!Array.isArray(eye) || eye.length !== states) fail();
+                    for (const map of eye) for (const type of ['empty','food','wall','mouth','producer','mover','killer','armor','eye']) {
+                        const choice = map && map[type];
+                        if (!choice || !Number.isInteger(choice.decision) || choice.decision < 0 || choice.decision > 7 || !Number.isInteger(choice.state) || choice.state < 0 || choice.state >= states) fail();
+                    }
+                }
             }
             let last = -1;
             for (const h of data.history) { if (!Number.isSafeInteger(h.tick) || h.tick <= last || !Number.isSafeInteger(h.living) || h.living < 0) fail(); last = h.tick; }

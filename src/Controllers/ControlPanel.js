@@ -287,7 +287,10 @@ class ControlPanel {
             let was_running = this.engine.running;
             this.setPaused(true);
             let env = this.engine.env.serialize();
-            let data = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(env));
+            // TADIWA EDIT START: Blob download for worlds containing large lineage archives
+            let data = URL.createObjectURL(new Blob([JSON.stringify(env)], {type: 'application/json'}));
+            setTimeout(() => URL.revokeObjectURL(data), 1000);
+            // TADIWA EDIT END: Blob download for worlds containing large lineage archives
             let downloadEl = document.getElementById('download-el');
             downloadEl.setAttribute("href", data);
             downloadEl.setAttribute("download", $('#save-env-name').val()+".json");
