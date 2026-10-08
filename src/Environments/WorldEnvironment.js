@@ -9,6 +9,9 @@ const FossilRecord = require('../Stats/FossilRecord');
 const WorldConfig = require('../WorldConfig');
 const SerializeHelper = require('../Utils/SerializeHelper');
 const Species = require('../Stats/Species');
+// TADIWA EDIT START: lineage dependency
+const LineageTracker = require('../Stats/LineageTracker');
+// TADIWA EDIT END: lineage dependency
 
 class WorldEnvironment extends Environment{
     constructor(engine, cell_size) {
@@ -26,10 +29,18 @@ class WorldEnvironment extends Environment{
         this.reset_count = 0;
         this.total_ticks = 0;
         this.data_update_rate = 100;
+// TADIWA EDIT START: world archive ownership
+        this.lineage_event_tick = null;
+        this.lineage = new LineageTracker(this);
+// TADIWA EDIT END: world archive ownership
         FossilRecord.setEnv(this);
     }
 
     update() {
+// TADIWA EDIT START: completed tick event scope
+        this.lineage_event_tick = this.total_ticks + 1;
+        try {
+// TADIWA EDIT END: completed tick event scope
         var to_remove = [];
         for (var i in this.organisms) {
             var org = this.organisms[i];
@@ -45,6 +56,10 @@ class WorldEnvironment extends Environment{
         if (this.total_ticks % this.data_update_rate == 0) {
             FossilRecord.updateData();
         }
+// TADIWA EDIT START: sample after completed tick
+        this.lineage.sample(this.total_ticks);
+        } finally { this.lineage_event_tick = null; }
+// TADIWA EDIT END: sample after completed tick
     }
 
     render() {
@@ -63,6 +78,9 @@ class WorldEnvironment extends Environment{
     removeOrganisms(org_indeces) {
         let start_pop = this.organisms.length;
         for (var i of org_indeces.reverse()){
+// TADIWA EDIT START: observe all removals
+            this.lineage.death(this.organisms[i], 'removed from world');
+// TADIWA EDIT END: observe all removals
             this.total_mutability -= this.organisms[i].mutability;
             this.organisms.splice(i, 1);
         }
@@ -123,6 +141,9 @@ class WorldEnvironment extends Environment{
     }
 
     clearOrganisms() {
+// TADIWA EDIT START: annotate manual clear
+        this.lineage.intervene('manual clear');
+// TADIWA EDIT END: annotate manual clear
         for (var org of this.organisms)
             org.die();
         this.organisms = [];
@@ -156,6 +177,11 @@ class WorldEnvironment extends Environment{
     reset(confirm_reset=true, reset_life=true) {
         if (confirm_reset && !confirm('The current environment will be lost. Proceed?'))
             return false;
+// TADIWA EDIT START: preserve archive across reset
+        this.lineage.intervene('world reset');
+        this.lineage.stop('world reset; remaining individuals last seen at reset');
+        this.lineage_selection = null;
+// TADIWA EDIT END: preserve archive across reset
         let restart = false;
         if (this.engine.running) {
             this.engine.last_fps = this.engine.fps;
@@ -196,10 +222,19 @@ class WorldEnvironment extends Environment{
         env.grid = this.grid_map.serialize();
         env.organisms = [];
         for (let org of this.organisms){
-            env.organisms.push(org.serialize());
+// TADIWA EDIT START: explicit world organism tags
+            const raw = org.serialize();
+            raw.lineage_id = org.lineage_id;
+            raw.lineage_session = org.lineage_session;
+            env.organisms.push(raw);
+// TADIWA EDIT END: explicit world organism tags
         }
         env.fossil_record = FossilRecord.serialize();
         env.controls = Hyperparams;
+// TADIWA EDIT START: versioned world archive
+        env.lineage_tracker = this.lineage.serialize();
+        delete env.lineage_event_tick;
+// TADIWA EDIT END: versioned world archive
         return env;
     }
 
@@ -224,6 +259,9 @@ class WorldEnvironment extends Environment{
         for (let orgRaw of env.organisms) {
             let org = new Organism(orgRaw.col, orgRaw.row, this);
             org.loadRaw(orgRaw);
+// TADIWA EDIT START: restore nullable identity explicitly
+            org._lineage_load_tag = {id: orgRaw.lineage_id, session: orgRaw.lineage_session};
+// TADIWA EDIT END: restore nullable identity explicitly
             this.addOrganism(org);
             let s = species[orgRaw.species_name];
             if (!s){ // ideally, every organisms species should exists, but there is a bug that misses some species sometimes
@@ -242,6 +280,11 @@ class WorldEnvironment extends Environment{
             FossilRecord.addSpeciesObj(species[name]);
         FossilRecord.loadRaw(env.fossil_record);
         SerializeHelper.overwriteNonObjects(env, this);
+// TADIWA EDIT START: restore archive after world reconstruction
+        this.lineage_event_tick = null;
+        this.lineage_selection = null;
+        this.lineage.load(env.lineage_tracker);
+// TADIWA EDIT END: restore archive after world reconstruction
         if ($('#override-controls').is(':checked'))
             Hyperparams.loadJsonObj(env.controls)
         this.renderer.renderFullGrid(this.grid_map.grid);

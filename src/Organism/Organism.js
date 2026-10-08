@@ -14,7 +14,11 @@ class Organism {
         this.env = env;
         this.lifetime = 0;
         this.food_collected = 0;
+// TADIWA EDIT START: explicit observational identity
         this.living = true;
+        this.lineage_id = null;
+        this.lineage_session = null;
+// TADIWA EDIT END: explicit observational identity
         this.anatomy = new Anatomy(this)
         this.direction = Directions.down; // direction of movement
         this.rotation = Directions.up; // direction of rotation
@@ -101,6 +105,9 @@ class Organism {
             else {
                 org.species.addPop();
             }
+// TADIWA EDIT START: successful biological birth
+            if (this.env.lineage) this.env.lineage.birth(this, org);
+// TADIWA EDIT END: successful biological birth
         }
         Math.max(this.food_collected -= this.foodNeeded(), 0);
     }
@@ -288,6 +295,9 @@ class Organism {
     }
 
     die() {
+// TADIWA EDIT START: idempotent death observation
+        if (this.env.lineage) this.env.lineage.death(this);
+// TADIWA EDIT END: idempotent death observation
         for (var cell of this.anatomy.cells) {
             var real_c = this.c + cell.rotatedCol(this.rotation);
             var real_r = this.r + cell.rotatedRow(this.rotation);
@@ -412,7 +422,12 @@ class Organism {
         org.anatomy = this.anatomy.serialize();
         if (this.anatomy.is_mover && this.anatomy.has_eyes)
             org.brain = this.brain.serialize();
+// TADIWA EDIT START: separate standalone exports from world tags
         org.species_name = this.species.name;
+        // Generic organism exports never carry world identity.
+        delete org.lineage_id;
+        delete org.lineage_session;
+// TADIWA EDIT END: separate standalone exports from world tags
         return org;
     }
 

@@ -636,6 +636,9 @@ class ControlPanel {
     }
 
     setEditorOrganism(org) {
+// TADIWA EDIT START: keep original live selection
+        this.engine.env.lineage_selection = org;
+// TADIWA EDIT END: keep original live selection
         this.engine.organism_editor.setOrganismToCopyOf(org);
         this.editor_controller.clearDetailsPanel();
         this.editor_controller.setEditorPanel();
