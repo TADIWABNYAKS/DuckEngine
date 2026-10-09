@@ -227,8 +227,9 @@ class WorldEnvironment extends Environment{
         for (let org of this.organisms){
 // TADIWA EDIT START: explicit world organism tags
             const raw = org.serialize();
-            raw.lineage_id = org.lineage_id;
-            raw.lineage_session = org.lineage_session;
+            const node = this.lineage.nodeFor(org);
+            raw.lineage_id = node ? node.id : null;
+            raw.lineage_session = node ? this.lineage.session : null;
             env.organisms.push(raw);
 // TADIWA EDIT END: explicit world organism tags
         }
@@ -259,11 +260,14 @@ class WorldEnvironment extends Environment{
             species[name] = s; // the species needs an anatomy obj still
         }
 
+// TADIWA EDIT START: transient load tags without modifying organism shapes
+        const lineageTags = new Map();
+// TADIWA EDIT END: transient load tags without modifying organism shapes
         for (let orgRaw of env.organisms) {
             let org = new Organism(orgRaw.col, orgRaw.row, this);
             org.loadRaw(orgRaw);
 // TADIWA EDIT START: restore nullable identity explicitly
-            org._lineage_load_tag = {id: orgRaw.lineage_id, session: orgRaw.lineage_session};
+            lineageTags.set(org, {id: orgRaw.lineage_id, session: orgRaw.lineage_session});
 // TADIWA EDIT END: restore nullable identity explicitly
             this.addOrganism(org);
             let s = species[orgRaw.species_name];
@@ -286,7 +290,7 @@ class WorldEnvironment extends Environment{
 // TADIWA EDIT START: restore archive after world reconstruction
         this.lineage_event_tick = null;
         this.lineage_selection = null;
-        this.lineage.load(env.lineage_tracker);
+        this.lineage.load(env.lineage_tracker, lineageTags);
 // TADIWA EDIT END: restore archive after world reconstruction
         if ($('#override-controls').is(':checked'))
             Hyperparams.loadJsonObj(env.controls)

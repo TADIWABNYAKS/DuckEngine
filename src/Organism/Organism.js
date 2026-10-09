@@ -428,7 +428,10 @@ class Organism {
     }
 
     loadRaw(org) {
-        SerializeHelper.overwriteNonObjects(org, this);
+// TADIWA EDIT START: world tags are not organism properties or inherited editor data
+        const {lineage_id, lineage_session, ...form} = org;
+        SerializeHelper.overwriteNonObjects(form, this);
+// TADIWA EDIT END: world tags are not organism properties or inherited editor data
         this.anatomy.loadRaw(org.anatomy)
         if (org.brain)
             this.brain.copy(org.brain)
