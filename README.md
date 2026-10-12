@@ -86,7 +86,9 @@ successfully produces has a 10% chance of containing pollen, shown in a differen
 colour in every theme. Pollen food remains ordinary food for nutrition, eyes,
 movement, and food-blocking rules. Corpse food and manually dropped food have no pollen.
 
-An organism can carry one load from another plant. Eating more pollen food still
+Only organisms with mover cells can carry pollen, with one load at a time.
+Stationary organisms receive normal nutrition but do not acquire pollen; stored
+loads on stationary organisms are discarded when loading older saves. Eating more pollen food still
 provides nutrition but does not replace the load or restart its timer. A plant
 cannot carry its own pollen. After 50 subsequent simulation ticks, the carrier
 has one 25% chance to create offspring of the source plant beside its current

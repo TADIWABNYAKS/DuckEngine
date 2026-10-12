@@ -132,9 +132,9 @@ class Organism {
         };
     }
 
-    /** Preserve the first foreign pollen load until its single reproduction attempt. */
+    /** Only movers retain a foreign pollen load; additional food does not reset it. */
     acquirePollen(payload) {
-        if (!payload || this.pollen || payload.source_id === this.source_id) return;
+        if (!this.anatomy.is_mover || !payload || this.pollen || payload.source_id === this.source_id) return;
         this.pollen = {source: payload, remaining: Hyperparams.pollenDelayTicks};
     }
 
@@ -154,6 +154,10 @@ class Organism {
 
     /** Advance an existing load and consume it before attempting reproduction. */
     updatePollen() {
+        if (!this.anatomy.is_mover) {
+            this.pollen = null;
+            return;
+        }
         if (!this.pollen || --this.pollen.remaining > 0) return;
         const source = this.pollen.source;
         this.pollen = null;
@@ -505,6 +509,8 @@ class Organism {
         this.pollen = org.pollen ? JSON.parse(JSON.stringify(org.pollen)) : null;
         SerializeHelper.overwriteNonObjects(org, this);
         this.anatomy.loadRaw(org.anatomy)
+        // Discard stationary carriers from saves created before the mover-only rule.
+        if (!this.anatomy.is_mover) this.pollen = null;
         if (org.brain)
             this.brain.copy(org.brain)
     }
