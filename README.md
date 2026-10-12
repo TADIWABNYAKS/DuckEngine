@@ -111,3 +111,32 @@ integer ticks), reproduction probability (0–100%), and plant lifespan factor
 have no stored pollen and use the new defaults when their controls are applied.
 Set pollen probability to 0 and plant lifespan factor to 1 for baseline mechanics;
 existing loads will still finish their attempts.
+
+## Change log
+
+This log records changes made to this codebase. Add future entries
+below with the date, behaviour changed, and any compatibility implications.
+
+### 2026-10-12 — Pollen-assisted reproduction (Henning)
+
+- Added pollen-bearing food from stationary producers, with distinct colours in
+  every theme and normal food nutrition and perception.
+- Added delayed, single-attempt reproduction beside pollen carriers, using the
+  source plant's inherited traits and existing mutation and placement rules.
+  Pollen remains viable after the source plant dies.
+- Added adjustable pollen production probability, carrier delay, reproduction
+  probability, and plant lifespan factor. Defaults are 10%, 50 ticks, 25%, and
+  0.75 respectively; stationary plants therefore have 25% shorter lifespans.
+- Extended world saves to preserve pollen food, carrier timers, source identity,
+  and species records, including extinct sources. Older saves remain loadable,
+  and species renaming preserves outstanding pollen references.
+- Shared offspring creation and birth registration between ordinary and pollen
+  reproduction. Ordinary food-based reproduction remains available: setting
+  pollen reproduction probability to 0% disables only births through carriers.
+
+### 2026-10-12 — Mover-only pollen carriers (Henning)
+
+- Restricted pollen acquisition and reproduction through carriers to organisms
+  with mover cells. Stationary organisms still receive normal food nutrition.
+- Added compatibility handling to discard pollen stored on stationary organisms
+  when loading saves created before this restriction.
