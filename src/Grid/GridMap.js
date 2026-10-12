@@ -91,7 +91,7 @@ class GridMap {
                 if (cell.state===CellStates.wall || cell.state===CellStates.food){
                     let c = {c: cell.col, r: cell.row}; // no need to store state
                     if (cell.state===CellStates.food)
-                        grid.food.push(c)
+                        grid.food.push(cell.pollen ? {...c, pollen: cell.pollen} : c)
                     else
                         grid.walls.push(c)
                 }
@@ -101,8 +101,11 @@ class GridMap {
     }
 
     loadRaw(grid) {
-        for (let f of grid.food)
+        for (let f of grid.food) {
             this.setCellType(f.c, f.r, CellStates.food);
+            const cell = this.cellAt(f.c, f.r);
+            if (cell) cell.pollen = f.pollen || null;
+        }
         for (let w of grid.walls)
             this.setCellType(w.c, w.r, CellStates.wall);
     }

@@ -19,6 +19,12 @@ class Empty extends CellState {
 class Food extends CellState {
     constructor() {
         super('food');
+        this.pollenColor = '#FFD166';
+    }
+    render(ctx, cell, size) {
+        // Pollen changes appearance only; perception and collision still see food.
+        ctx.fillStyle = cell.pollen ? this.pollenColor : this.color;
+        ctx.fillRect(cell.x, cell.y, size, size);
     }
 }
 class Wall extends CellState {

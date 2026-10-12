@@ -43,8 +43,24 @@ class WorldEnvironment extends Environment{
         }
         this.total_ticks ++;
         if (this.total_ticks % this.data_update_rate == 0) {
+            this.prunePollenSpecies();
             FossilRecord.updateData();
         }
+    }
+
+    /** Release extinct species once no food cell or carrier references their pollen. */
+    prunePollenSpecies() {
+        const retained = {};
+        const retain = payload => {
+            if (!payload) return;
+            const name = payload.species_name;
+            const species = FossilRecord.extant_species[name] || FossilRecord.pollen_species[name];
+            if (species) retained[name] = species;
+        };
+        for (const column of this.grid_map.grid)
+            for (const cell of column) retain(cell.pollen);
+        for (const org of this.organisms) if (org.pollen) retain(org.pollen.source);
+        FossilRecord.pollen_species = retained;
     }
 
     render() {
@@ -199,6 +215,15 @@ class WorldEnvironment extends Environment{
             env.organisms.push(org.serialize());
         }
         env.fossil_record = FossilRecord.serialize();
+        // Only retain species still referenced by food or a carrier.
+        const names = new Set();
+        for (const food of env.grid.food) if (food.pollen) names.add(food.pollen.species_name);
+        for (const org of env.organisms) if (org.pollen) names.add(org.pollen.source.species_name);
+        env.pollen_species = {};
+        for (const name of names) {
+            const species = FossilRecord.extant_species[name] || FossilRecord.pollen_species[name];
+            if (species) env.pollen_species[name] = SerializeHelper.copyNonObjects(species);
+        }
         env.controls = Hyperparams;
         return env;
     }
@@ -240,6 +265,25 @@ class WorldEnvironment extends Environment{
         }
         for (let name in species)
             FossilRecord.addSpeciesObj(species[name]);
+        // Reuse living species records; reconstruct extinct sources retained by pollen.
+        for (const [name, raw] of Object.entries(env.pollen_species || {})) {
+            const s = species[name] || new Species(null, null, 0);
+            if (!species[name]) SerializeHelper.overwriteNonObjects(raw, s);
+            FossilRecord.pollen_species[name] = s;
+        }
+        // Source snapshots supply anatomy omitted from compact species records.
+        const restoreAnatomy = payload => {
+            if (!payload) return;
+            const s = FossilRecord.pollen_species[payload.species_name];
+            if (s && !s.anatomy) {
+                const template = new Organism(0, 0, this);
+                template.loadRaw(payload);
+                s.anatomy = template.anatomy;
+                s.calcAnatomyDetails();
+            }
+        };
+        for (const f of env.grid.food) restoreAnatomy(f.pollen);
+        for (const org of this.organisms) if (org.pollen) restoreAnatomy(org.pollen.source);
         FossilRecord.loadRaw(env.fossil_record);
         SerializeHelper.overwriteNonObjects(env, this);
         if ($('#override-controls').is(':checked'))

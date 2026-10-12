@@ -77,3 +77,35 @@ Organims can also rotate around a central pivot cell. This cell can never be rem
 
 ## Eyes and Brains
 Any organism can evolve eyes, but when an organism has both eyes and mover cells it is given a brain. The eye, unlike other cells, has a direction, which is denoted by the direction of the slit in the cell. It "looks" forward in this direction and "sees" the first non-empty cell within a certain range. It checks the type of the cell and informs the brain, which then decideds how to move. The brain can either ignore (keep moving in whatever direction), chase (move towards the observed cell), or retreat (move in the opposite direction of the observed cell). The brain maps different observed cell types to different actions. For instance, the brain will chase when it sees food and retreat when it sees a killer cell. These behaviors can mutate over time. 
+
+
+## Pollen-assisted plant reproduction
+
+A plant is an organism with producer cells and no mover cells. Each food cell it
+successfully produces has a 10% chance of containing pollen, shown in a different
+colour in every theme. Pollen food remains ordinary food for nutrition, eyes,
+movement, and food-blocking rules. Corpse food and manually dropped food have no pollen.
+
+An organism can carry one load from another plant. Eating more pollen food still
+provides nutrition but does not replace the load or restart its timer. A plant
+cannot carry its own pollen. After 50 subsequent simulation ticks, the carrier
+has one 25% chance to create offspring of the source plant beside its current
+position. The load is discarded after that attempt, even if there is no space or
+the population limit has been reached. Carrier death also destroys the load.
+
+Offspring inherit the source plant's saved traits and use normal mutation and
+rotation rules. The four cardinal sides are tried in random order, with a one-cell
+gap between the carrier and offspring bounding boxes. Occupied cells and world
+edges prevent placement. Pollen remains viable after the source plant dies, and
+world saves preserve pollen food, carrier timers, source identity, and species.
+Carrier offspring do not inherit the carried load. Existing food-based reproduction
+continues alongside pollen reproduction.
+
+Stationary producers live for `cell count × lifespan multiplier × plant lifespan
+factor`, with a minimum of one tick. The default factor is 0.75 (25% shorter).
+Evolution Controls includes pollen food probability (0–100%), delay (positive
+integer ticks), reproduction probability (0–100%), and plant lifespan factor
+(0.01–1). Changes to the delay apply to newly acquired loads. Loaded older worlds
+have no stored pollen and use the new defaults when their controls are applied.
+Set pollen probability to 0 and plant lifespan factor to 1 for baseline mechanics;
+existing loads will still finish their attempts.

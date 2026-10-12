@@ -5,6 +5,7 @@ const Species = require("./Species");
 const FossilRecord = {
     init: function(){
         this.extant_species = {};
+        this.pollen_species = {};
         this.extinct_species = {};
 
         // if an organism has fewer than this cumulative pop, discard them on extinction
@@ -39,7 +40,18 @@ const FossilRecord = {
             console.warn('Tried to change species name to an existing species name. Change failed.');
             return;
         }
-        delete this.extant_species[species.name];
+        const old_name = species.name;
+        const renamePollen = payload => {
+            if (payload && payload.species_name === old_name) payload.species_name = new_name;
+        };
+        for (const column of this.env.grid_map.grid)
+            for (const cell of column) renamePollen(cell.pollen);
+        for (const org of this.env.organisms) if (org.pollen) renamePollen(org.pollen.source);
+        if (this.pollen_species[old_name]) {
+            this.pollen_species[new_name] = species;
+            delete this.pollen_species[old_name];
+        }
+        delete this.extant_species[old_name];
         species.name = new_name;
         this.extant_species[new_name] = species;
     },
@@ -66,6 +78,7 @@ const FossilRecord = {
     resurrect: function(species) {
         if (species.extinct) {
             species.extinct = false;
+            species.end_tick = -1;
             this.extant_species[species.name] = species;
             delete this.extinct_species[species.name];
         }
@@ -144,7 +157,8 @@ const FossilRecord = {
     },
 
     clear_record() {
-        this.extant_species = [];
+        this.extant_species = {};
+        this.pollen_species = {};
         this.extinct_species = [];
         this.setData();
     },

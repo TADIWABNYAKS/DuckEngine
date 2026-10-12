@@ -22,6 +22,8 @@ class ProducerCell extends BodyCell{
             var cell = env.grid_map.cellAt(real_c+loc_c, real_r+loc_r);
             if (cell != null && cell.state == CellStates.empty){
                 env.changeCell(real_c+loc_c, real_r+loc_r, CellStates.food, null);
+                if (this.org.isPlant() && this.org.calcRandomChance(Hyperparams.pollenFoodProb))
+                    cell.pollen = this.org.createPollen();
                 return;
             }
         }

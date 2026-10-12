@@ -12,6 +12,9 @@ class Organism {
         this.c = col;
         this.r = row;
         this.env = env;
+        // Persist identity across saves so plants cannot acquire their own pollen.
+        this.source_id = Array.from(globalThis.crypto.getRandomValues(new Uint32Array(4)), n => n.toString(16).padStart(8, '0')).join('');
+        this.pollen = null;
         this.lifetime = 0;
         this.food_collected = 0;
         this.living = true;
@@ -46,16 +49,16 @@ class Organism {
     }
 
     lifespan() {
-        return this.anatomy.cells.length * Hyperparams.lifespanMultiplier;
+        return Math.max(1, this.anatomy.cells.length * Hyperparams.lifespanMultiplier *
+            (this.isPlant() ? Hyperparams.plantLifespanFactor : 1));
     }
 
     maxHealth() {
         return this.anatomy.cells.length;
     }
 
-    reproduce() {
-        //produce mutated child
-        //check nearby locations (is there room and a direct path)
+    /** Create inherited, optionally mutated offspring without placing it in the world. */
+    createOffspring() {
         var org = new Organism(0, 0, this.env, this);
         if(Hyperparams.rotationEnabled){
             org.rotation = Directions.getRandomDirection();
@@ -79,6 +82,21 @@ class Organism {
             mutated = org.mutate();
         }
 
+        return {org, mutated};
+    }
+
+    /** Register a placed offspring and update its species population or lineage. */
+    registerBirth(org, mutated) {
+        this.env.addOrganism(org);
+        if (mutated) FossilRecord.addSpecies(org, this.species);
+        else {
+            FossilRecord.resurrect(org.species);
+            org.species.addPop();
+        }
+    }
+
+    reproduce() {
+        const {org, mutated} = this.createOffspring();
         var direction = Directions.getRandomScalar();
         var direction_c = direction[0];
         var direction_r = direction[1];
@@ -93,16 +111,78 @@ class Organism {
         {
             org.c = new_c;
             org.r = new_r;
-            this.env.addOrganism(org);
-            org.updateGrid();
-            if (mutated) {
-                FossilRecord.addSpecies(org, this.species);
-            }
-            else {
-                org.species.addPop();
-            }
+            this.registerBirth(org, mutated);
         }
         Math.max(this.food_collected -= this.foodNeeded(), 0);
+    }
+
+    /** Only stationary producers participate in pollen production and reduced lifespan. */
+    isPlant() {
+        return this.anatomy.is_producer && !this.anatomy.is_mover;
+    }
+
+    /** Snapshot inheritable traits and retain the source species after parent death. */
+    createPollen() {
+        FossilRecord.pollen_species[this.species.name] = this.species;
+        return {
+            source_id: this.source_id,
+            anatomy: this.anatomy.serialize(), brain: JSON.parse(JSON.stringify(this.brain.serialize())),
+            move_range: this.move_range, mutability: this.mutability,
+            species_name: this.species.name
+        };
+    }
+
+    /** Preserve the first foreign pollen load until its single reproduction attempt. */
+    acquirePollen(payload) {
+        if (!payload || this.pollen || payload.source_id === this.source_id) return;
+        this.pollen = {source: payload, remaining: Hyperparams.pollenDelayTicks};
+    }
+
+    /** Compute local bounds after rotation without allocating coordinate arrays. */
+    bounds() {
+        let left = Infinity, right = -Infinity, top = Infinity, bottom = -Infinity;
+        for (const cell of this.anatomy.cells) {
+            const col = cell.rotatedCol(this.rotation);
+            const row = cell.rotatedRow(this.rotation);
+            left = Math.min(left, col);
+            right = Math.max(right, col);
+            top = Math.min(top, row);
+            bottom = Math.max(bottom, row);
+        }
+        return {left, right, top, bottom};
+    }
+
+    /** Advance an existing load and consume it before attempting reproduction. */
+    updatePollen() {
+        if (!this.pollen || --this.pollen.remaining > 0) return;
+        const source = this.pollen.source;
+        this.pollen = null;
+        if (!this.calcRandomChance(Hyperparams.pollenReproductionProb) || !this.env.canAddOrganism()) return;
+        const species = FossilRecord.extant_species[source.species_name] || FossilRecord.pollen_species[source.species_name];
+        if (!species) return;
+        const parent = new Organism(0, 0, this.env);
+        parent.loadRaw(source);
+        parent.species = species;
+        const {org, mutated} = parent.createOffspring();
+        const a = this.bounds(), b = org.bounds();
+        // A two-cell offset leaves a one-cell gap between the bounding boxes.
+        const positions = [
+            [this.c + a.right + 2 - b.left, this.r],
+            [this.c + a.left - 2 - b.right, this.r],
+            [this.c, this.r + a.bottom + 2 - b.top],
+            [this.c, this.r + a.top - 2 - b.bottom]
+        ];
+        for (let i = positions.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [positions[i], positions[j]] = [positions[j], positions[i]];
+        }
+        for (const [c, r] of positions) {
+            if (!org.isClear(c, r)) continue;
+            org.c = c;
+            org.r = r;
+            parent.registerBirth(org, mutated);
+            return;
+        }
     }
 
     mutate() {
@@ -288,6 +368,7 @@ class Organism {
     }
 
     die() {
+        this.pollen = null;
         for (var cell of this.anatomy.cells) {
             var real_c = this.c + cell.rotatedCol(this.rotation);
             var real_r = this.r + cell.rotatedRow(this.rotation);
@@ -306,6 +387,8 @@ class Organism {
     }
 
     update() {
+        // Newly acquired pollen starts aging on the following simulation tick.
+        const pollenAtStart = this.pollen;
         this.lifetime++;
         if (this.lifetime > this.lifespan()) {
             this.die();
@@ -378,6 +461,7 @@ class Organism {
                 }
             }
         }
+        if (pollenAtStart && this.pollen === pollenAtStart) this.updatePollen();
         return this.living;
     }
 
@@ -409,6 +493,7 @@ class Organism {
 
     serialize() {
         let org = SerializeHelper.copyNonObjects(this);
+        org.pollen = this.pollen ? JSON.parse(JSON.stringify(this.pollen)) : null;
         org.anatomy = this.anatomy.serialize();
         if (this.anatomy.is_mover && this.anatomy.has_eyes)
             org.brain = this.brain.serialize();
@@ -417,6 +502,7 @@ class Organism {
     }
 
     loadRaw(org) {
+        this.pollen = org.pollen ? JSON.parse(JSON.stringify(org.pollen)) : null;
         SerializeHelper.overwriteNonObjects(org, this);
         this.anatomy.loadRaw(org.anatomy)
         if (org.brain)
