@@ -147,6 +147,10 @@ input:hover,input:active {
     height: fit-content;
 }
 
+/* TADIWA EDIT START: match original editor toolbar button dimensions */
+.editor-buttons > button { width: 30px; height: 30px; box-sizing: border-box; }
+/* TADIWA EDIT END: match original editor toolbar button dimensions */
+
 .col-row-input {
     display: none;
 }

@@ -52,7 +52,10 @@ class LineagePanel {
         // Prevent existing simulation hotkeys from interpreting text entry in this panel.
         this.panel.addEventListener('keydown', e => e.stopPropagation());
         document.body.append(this.panel);
-        const track = button('Track species', () => this.track()); track.id = 'track-descendants';
+        const track = button(undefined, () => this.track()); track.id = 'track-descendants';
+        track.title = 'Track species'; track.setAttribute('aria-label', 'Track species');
+        const trackIcon = el('i', undefined, 'fa-solid fa-sitemap');
+        trackIcon.setAttribute('aria-hidden', 'true'); track.append(trackIcon);
         document.querySelector('.editor-buttons').append(track);
     }
     discardConfirmed() {
