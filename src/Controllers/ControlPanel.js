@@ -1,3 +1,4 @@
+const Seasons = require('../Environments/Seasons');
 const Hyperparams = require("../Hyperparameters");
 const Modes = require("./ControlModes");
 const StatsPanel = require("../Stats/StatsPanel");
@@ -368,6 +369,32 @@ class ControlPanel {
             Hyperparams.maxOrganisms = parseInt($('#org-limit').val());
         });
 
+        // Seasons and food decay controls - Implemented by Jack
+        $('#seasons-enabled').change(function() {
+            Hyperparams.seasonsEnabled = this.checked;
+        });
+        $('#season-length').change(function() {
+            Hyperparams.seasonLength = Math.max(1, parseInt($('#season-length').val()) || 1);
+        });
+        $('#summer-production').change(function() {
+            Hyperparams.summerProductionMultiplier = parseFloat($('#summer-production').val());
+        });
+        $('#winter-production').change(function() {
+            Hyperparams.winterProductionMultiplier = parseFloat($('#winter-production').val());
+        });
+        $('#summer-decay').change(function() {
+            Hyperparams.summerDecayMultiplier = parseFloat($('#summer-decay').val());
+        });
+        $('#winter-decay').change(function() {
+            Hyperparams.winterDecayMultiplier = parseFloat($('#winter-decay').val());
+        });
+        $('#food-decay-enabled').change(function() {
+            Hyperparams.foodDecayEnabled = this.checked;
+        });
+        $('#food-decay-rate').change(function() {
+            Hyperparams.foodDecayRate = parseFloat($('#food-decay-rate').val());
+        });
+
         $('#evolved-mutation').change( function() {
             if (this.checked) {
                 $('.global-mutation-container').css('display', 'none');
@@ -470,6 +497,14 @@ class ControlPanel {
         $('#see-through-self').prop('checked', Hyperparams.seeThroughSelf);
         $('#global-mutation').val(Hyperparams.globalMutability);
         $('#independent-eye-decisions').prop('checked', Hyperparams.evolveIndependentEyeDecisions);
+        $('#seasons-enabled').prop('checked', Hyperparams.seasonsEnabled);
+        $('#season-length').val(Hyperparams.seasonLength);
+        $('#summer-production').val(Hyperparams.summerProductionMultiplier);
+        $('#winter-production').val(Hyperparams.winterProductionMultiplier);
+        $('#summer-decay').val(Hyperparams.summerDecayMultiplier);
+        $('#winter-decay').val(Hyperparams.winterDecayMultiplier);
+        $('#food-decay-enabled').prop('checked', Hyperparams.foodDecayEnabled);
+        $('#food-decay-rate').val(Hyperparams.foodDecayRate);
         
         if (!Hyperparams.useGlobalMutability) {
             $('.global-mutation-container').css('display', 'none');
@@ -667,6 +702,10 @@ class ControlPanel {
         $('#fps-actual').text("Actual FPS: " + Math.floor(this.engine.actual_fps));
         $('#fps-hot').text(Math.floor(this.engine.actual_fps)+' FPS');
         $('#reset-count').text("Auto reset count: " + this.engine.env.reset_count);
+        let tick = this.engine.env.total_ticks;
+        $('#season-display').text(Hyperparams.seasonsEnabled
+            ? "Season: " + Seasons.name(tick) + " (" + Seasons.ticksLeft(tick) + " ticks left)"
+            : "Season: Off");
         this.stats_panel.updateDetails();
         if (WorldConfig.headless)
             this.updateHeadlessIcon(delta_time);

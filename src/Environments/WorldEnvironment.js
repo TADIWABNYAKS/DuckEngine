@@ -9,6 +9,7 @@ const FossilRecord = require('../Stats/FossilRecord');
 const WorldConfig = require('../WorldConfig');
 const SerializeHelper = require('../Utils/SerializeHelper');
 const Species = require('../Stats/Species');
+const Seasons = require('./Seasons');
 
 class WorldEnvironment extends Environment{
     constructor(engine, cell_size) {
@@ -40,6 +41,9 @@ class WorldEnvironment extends Environment{
         this.removeOrganisms(to_remove);
         if (Hyperparams.foodDropProb > 0) {
             this.generateFood();
+        }
+        if (Hyperparams.foodDecayEnabled && Hyperparams.foodDecayRate > 0) {
+            this.decayFood();
         }
         this.total_ticks ++;
         if (this.total_ticks % this.data_update_rate == 0) {
@@ -149,6 +153,27 @@ class WorldEnvironment extends Environment{
                 if (this.grid_map.cellAt(c, r).state == CellStates.empty){
                     this.changeCell(c, r, CellStates.food, null);
                 }
+            }
+        }
+    }
+
+    // Food decay - Implemented by Jack
+    // Each food cell has a foodDecayRate% chance per tick of rotting into empty space (scaled by season).
+    // Rather than checking every cell, we check a random sample of cells, which gives the same
+    // average result but runs faster. Only food is removed, never organisms.
+    decayFood() {
+        var chance = (Hyperparams.foodDecayRate / 100) * Seasons.decayMultiplier(this.total_ticks);
+        if (chance <= 0) return;
+        var cols = this.grid_map.cols;
+        var rows = this.grid_map.rows;
+        var expected = cols * rows * Math.min(chance, 1);
+        var samples = Math.floor(expected);
+        if (Math.random() < expected - samples) samples++;
+        for (var i = 0; i < samples; i++) {
+            var c = Math.floor(Math.random() * cols);
+            var r = Math.floor(Math.random() * rows);
+            if (this.grid_map.cellAt(c, r).state == CellStates.food) {
+                this.changeCell(c, r, CellStates.empty, null);
             }
         }
     }
