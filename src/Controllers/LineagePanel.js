@@ -1,6 +1,7 @@
 // TADIWA EDIT START: full ancestry navigation, comparisons, history and downloads
 const Snapshot = require('../Stats/LineageSnapshot');
 const thumbnail = require('../Rendering/LineageThumbnail');
+const Insights = require('./LineageInsights');
 const Modes = require('./ControlModes');
 function el(tag, text, className) {
     const element = document.createElement(tag);
@@ -26,7 +27,7 @@ class LineagePanel {
         this.panel = el('section', undefined, 'lineage-panel');
         this.panel.id = 'lineage-panel'; this.panel.hidden = true; this.panel.setAttribute('aria-label', 'Lineage tracker');
         const header = el('header'); header.append(el('h2', 'Species mutation tree'), button('Close lineage', () => this.hide()));
-        const help = el('p', 'Select a living creature to track every current member of its engine species and their future descendants. Only visible body changes (including eye direction) branch. Unchanged births share a population. Later manual clones are excluded; earlier mutated species are unknown. Previews and downloads preserve the first observed representative of each form.');
+        const help = el('p', 'Select a living creature to track every current member of its engine species and their future descendants. Only visible body changes (including eye direction) branch; active brain versions are recorded within each form. Unchanged births share a population. Later manual clones are excluded; earlier mutated species are unknown. Previews and downloads preserve the first observed representative of each form.');
         const actions = el('div', undefined, 'lineage-actions');
         actions.append(button('Select creature', () => { this.hide(); this.engine.controlpanel.setMode(Modes.Select); }),
             button('Track species', () => this.track()),
@@ -38,6 +39,7 @@ class LineagePanel {
         this.history = el('canvas'); this.history.width = 820; this.history.height = 120;
         this.history.setAttribute('aria-label', 'Whole lineage and selected form population over recorded ticks');
         this.historyCaption = el('p', '', 'lineage-history-caption');
+        this.insights = new Insights(this, download);
         const navigation = el('div', undefined, 'lineage-actions');
         this.lookup = el('input'); this.lookup.type = 'number'; this.lookup.min = 1; this.lookup.placeholder = 'Form ID'; this.lookup.setAttribute('aria-label', 'Form ID');
         const find = () => { const id = Number(this.lookup.value); if (this.env.lineage.byId.has(id)) this.navigate(id); else this.message.textContent = 'No recorded form with that ID.'; };
@@ -48,7 +50,7 @@ class LineagePanel {
         this.tree = el('div', undefined, 'lineage-tree'); this.tree.setAttribute('aria-label', 'Visible body mutation tree');
         this.inspector = el('aside', undefined, 'lineage-inspector'); this.inspector.setAttribute('aria-label', 'Selected body form');
         const body = el('div', undefined, 'lineage-body'); body.append(this.tree, this.inspector);
-        this.panel.append(header, help, actions, this.message, this.summary, this.history, this.historyCaption, navigation, body);
+        this.panel.append(header, help, actions, this.message, this.summary, this.insights.rates, this.insights.chartControls, this.history, this.historyCaption, this.insights.events, navigation, body);
         // Prevent existing simulation hotkeys from interpreting text entry in this panel.
         this.panel.addEventListener('keydown', e => e.stopPropagation());
         document.body.append(this.panel);
@@ -98,7 +100,7 @@ class LineagePanel {
         const t = this.env.lineage;
         if (this.archive !== t.nodes) {
             this.lookup.value = '';
-            this.archive = t.nodes; this.selected = this.focus = t.rootId; this.expanded.clear(); this.pages.clear(); this.thumbnails.clear(); this.inspectedKey = null;
+            this.archive = t.nodes; this.selected = this.focus = t.rootId; this.expanded.clear(); this.pages.clear(); this.thumbnails.clear(); this.inspectedKey = null; this.treeKey = null;
             if (t.rootId) this.expanded.add(t.rootId);
             force = true;
         }
@@ -108,10 +110,20 @@ class LineagePanel {
         this.summary.textContent = t.nodes.length ? `${t.active ? 'Recording' : 'Recording ended'} · ${t.initialPopulation} starting member${t.initialPopulation===1?'':'s'} · ${t.living} ${t.active ? 'living' : 'last observed living'} across ${legacy ? 'the legacy subset' : 'the entire line'} · ${t.totalBirths} births · ${t.nodes.length} visible forms · Peak ${t.peak} at tick ${t.peakTick} · ${t.extinctionTick === null ? (legacy ? 'Subset extinction not observed' : 'Whole-line extinction not observed') : (legacy ? 'Legacy subset extinct at tick ' : 'ENTIRE LINE EXTINCT at tick ') + t.extinctionTick}${t.complete ? '' : ' · INCOMPLETE RECORDING'}${t.endReason ? ' · ' + t.endReason : ''}${t.interventions.length ? ' · Interventions: ' + t.interventions.map(i => i.reason + ' at ' + i.tick).join('; ') : ''}` : 'No species recorded yet.';
         if (t.migrationMessage) this.message.textContent = t.migrationMessage;
         if (t.error) this.message.textContent = t.error;
-        this.drawHistory(); this.drawTree(); this.inspect();
+        this.insights.update(); this.drawHistory(); this.drawTree(); this.inspect();
     }
     drawTree() {
-        this.tree.replaceChildren(); const t = this.env.lineage;
+        const t = this.env.lineage;
+        const key = JSON.stringify([t.nodes.length,this.focus,[...this.expanded],[...this.pages]]);
+        if (this.treeKey === key) {
+            for (const [id, refs] of this.treeRefs) {
+                refs.status.textContent = this.status(t.byId.get(id));
+                refs.card.classList.toggle('lineage-selected', id === this.selected);
+                refs.select.setAttribute('aria-pressed', String(id === this.selected));
+            }
+            return;
+        }
+        this.treeKey = key; this.treeRefs = new Map(); this.tree.replaceChildren();
         if (!t.byId.has(this.focus)) return;
         let budget = 120;
         const draw = (id, depth) => {
@@ -122,7 +134,9 @@ class LineagePanel {
             const select = button(`#${id} · mutation depth ${node.mutationDepth}`, () => { this.selected = id; this.render(true); });
             select.setAttribute('aria-pressed', String(id === this.selected));
             const parent = node.parentId === null ? 'Root · earlier parent unknown' : `Parent #${node.parentId}`;
-            details.append(select, el('p', parent), el('p', 'First observed at tick ' + node.firstSeenTick), el('p', this.status(node)));
+            const status = el('p', this.status(node));
+            this.treeRefs.set(id, {card, select, status});
+            details.append(select, el('p', parent), el('p', 'First observed at tick ' + node.firstSeenTick), status);
             const p = t.byId.get(node.parentId), form = t.genomes[node.genomeId];
             if (p) { const changes = Snapshot.compare(t.genomes[p.genomeId], form); details.append(el('p', changes.body[0] + ' · ' + changes.brain[0])); }
             card.append(this.preview(node.genomeId), details); container.append(card);
@@ -149,18 +163,19 @@ class LineagePanel {
     }
     inspect() {
         const t = this.env.lineage, n = t.byId.get(this.selected);
-        const key = n ? `${t.session}:${n.id}:${n.population}:${n.totalBirths}:${n.extinctionTick}:${t.active}:${t.endedAtTick}` : 'empty';
-        if (this.inspectedKey === key) return;
+        const key = n ? `${t.session}:${n.id}` : 'empty';
+        if (this.inspectedKey === key) { if (n) { this.inspectorStatus.textContent = this.status(n); this.insights.renderForm(n); } return; }
         this.inspectedKey = key;
         const mapsOpen = this.inspector.querySelector('details')?.open;
         this.inspector.replaceChildren(); if (!n) return;
         const form = t.genomes[n.genomeId], parent = t.byId.get(n.parentId), pform = parent && t.genomes[parent.genomeId];
-        this.inspector.append(el('h3', 'Form #' + n.id), el('p', n.species), el('p', this.status(n)), el('p', 'First observed at tick ' + n.firstSeenTick + ' · Mutation depth ' + n.mutationDepth), this.preview(n.genomeId, 140));
+        this.inspectorStatus = el('p', this.status(n));
+        this.inspector.append(el('h3', 'Form #' + n.id), el('p', n.species), this.inspectorStatus, el('p', 'First observed at tick ' + n.firstSeenTick + ' · Mutation depth ' + n.mutationDepth), this.preview(n.genomeId, 140));
         this.inspector.append(button('Download form #' + n.id, () => download(t.exportNode(n.id), 'form-' + n.id + '.json')),
             button('Open representative in editor', () => { this.engine.organism_editor.controller.loadOrg(t.exportNode(n.id)); this.hide(); $('#maximize').click(); $('.tabnav #editor').click(); }),
             button('View mutated forms from #' + n.id, () => this.navigate(n.id)));
         if (parent) this.inspector.append(button('Inspect parent form #' + parent.id, () => { this.selected = parent.id; this.render(true); }), el('h4', 'Parent form #' + parent.id), this.preview(parent.genomeId, 140));
-        this.inspector.append(el('p', 'Body form representative: brain, movement range and mutability are from its first observed member. Those values can drift within this population without creating a branch. Extinction of this form alone is not whole-line extinction.'));
+        this.inspector.append(el('p', 'Body form representative: brain, movement range and mutability are from its first observed member. Active brain versions below record inherited changes without creating body branches. Extinction of this form alone is not whole-line extinction.'));
         this.inspector.append(el('p', `Movement range: ${pform ? pform.move_range + ' → ' : ''}${form.move_range} · Mutability: ${pform ? pform.mutability + ' → ' : ''}${form.mutability}`));
         const changes = Snapshot.compare(pform, form);
         for (const [title, values] of [['Body comparison', changes.body], ['Brain comparison', changes.brain]]) {
@@ -168,14 +183,15 @@ class LineagePanel {
         }
         const maps = el('details'); maps.open = !!mapsOpen; maps.append(el('summary', 'Representative brain and ordered body data'));
         if (pform) maps.append(el('h4', 'Parent'), el('pre', JSON.stringify(pform, null, 2)));
-        maps.append(el('h4', 'Selected'), el('pre', JSON.stringify(form, null, 2))); this.inspector.append(maps);
+        maps.append(el('h4', 'Selected'), el('pre', JSON.stringify(form, null, 2))); this.inspector.append(maps); this.insights.renderForm(n);
     }
     drawHistory() {
+        if (this.insights.mode.value === 'rates') { this.insights.drawRates(); return; }
         const t = this.env.lineage, data = t.history, ctx = this.history.getContext('2d');
         ctx.clearRect(0, 0, 820, 120);
         if (!data.length) { this.historyCaption.textContent = 'Population history is sampled every 100 completed ticks.'; return; }
-        const first = data[0].tick, last = data[data.length - 1].tick, max = Math.max(1, t.peak);
-        ctx.strokeStyle = '#5cdebb'; ctx.beginPath();
+        const first = data[0].tick, last = Math.max(data[data.length - 1].tick, t.research.events.at(-1)?.tick || 0), max = Math.max(1, t.peak);
+        ctx.strokeStyle = '#246c52'; ctx.beginPath();
         // Each horizontal bin retains its min/max; full history stays in the archive.
         const bins = new Map();
         for (const d of data) {
@@ -186,7 +202,7 @@ class LineagePanel {
         ctx.stroke();
         const selected = t.byId.get(this.selected);
         if (selected) {
-            ctx.strokeStyle = '#ffb85c'; ctx.beginPath();
+            ctx.strokeStyle = '#7230DB'; ctx.beginPath();
             const points = selected.history;
             // Bound canvas work to horizontal columns, retaining range within each column.
             const formBins = new Map();
@@ -198,8 +214,9 @@ class LineagePanel {
             for (const [x,[low,high]] of formBins) {ctx.lineTo(x,95-high/max*80);ctx.lineTo(x,95-low/max*80);}
             ctx.stroke();
         }
-        ctx.fillStyle = '#e5edf2'; ctx.font = '12px sans-serif'; ctx.fillText(String(max), 2, 16); ctx.fillText('0', 15, 98); ctx.fillText(String(first), 35, 115); ctx.fillText(String(last), 760, 115);
-        this.historyCaption.textContent = `Whole lineage (green), selected form (orange) · ticks ${first}–${last} · ${data.length} preserved samples (100-tick cadence plus start/end events). Event peak: ${t.peak} at tick ${t.peakTick}.`;
+        this.insights.drawMarkers(ctx, first, last);
+        ctx.fillStyle = '#18202b'; ctx.font = '12px sans-serif'; ctx.fillText(String(max), 2, 16); ctx.fillText('0', 15, 98); ctx.fillText(String(first), 35, 115); ctx.fillText(String(last), 760, 115);
+        this.historyCaption.textContent = `Whole lineage (green), selected form (purple) · ticks ${first}–${last} · ${data.length} preserved samples (100-tick cadence plus start/end events). Event peak: ${t.peak} at tick ${t.peakTick}. Click a marker to locate its event.`;
     }
 }
 module.exports = LineagePanel;

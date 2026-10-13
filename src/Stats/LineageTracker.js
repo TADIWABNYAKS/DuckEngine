@@ -1,6 +1,7 @@
 // TADIWA EDIT START: observational species populations and visible mutation branches
 const Snapshot = require('./LineageSnapshot');
 const migrate = require('./LineageMigration');
+const Research = require('./LineageResearch');
 const fields = ['session','scope','nodes','genomes','history','interventions','nextId','rootId','active','complete','initialPopulation','totalBirths','living','peak','peakTick','extinctionTick','endedAtTick','endReason','error','migrationMessage'];
 class LineageTracker {
     constructor(env) { this.env = env; this.session = 0; this.clear(); }
@@ -13,11 +14,12 @@ class LineageTracker {
         this.initialPopulation = this.totalBirths = this.living = this.peak = 0;
         this.peakTick = this.extinctionTick = this.endedAtTick = this.endReason = this.error = this.migrationMessage = null;
         this.revision = 0;
+        this.research = new Research(this);
     }
     tick() { return this.env.lineage_event_tick == null ? this.env.total_ticks : this.env.lineage_event_tick; }
     start(org) {
         if (!org || !org.living || !this.env.organisms.includes(org)) throw new Error('Select a living creature in this world first.');
-        this.clear(); this.active = true;
+        this.clear(); this.active = true; this.research.begin();
         const root = this.record(org, null); this.rootId = root.id;
         for (const member of this.env.organisms) if (member.living && member.species === org.species) {
             this.join(member, root, true);
@@ -33,10 +35,13 @@ class LineageTracker {
             extinctionTick:null, extinctionReason:null, extinctionCount:0, history:[]};
         this.genomes.push(form); this.nodes.push(node); this.byId.set(node.id,node); this.children.set(node.id,[]);
         if (parent) { this.children.get(parent.id).push(node.id); this.branches.set(parent.id + ':' + shapeKey,node); }
+        this.research.metric(node.id);
+        if (parent) this.research.event('body-mutation',node.id,`Body form #${node.id} from #${parent.id}`);
         return node;
     }
-    join(org, node, founder = false) {
+    join(org, node, founder = false, parent = null, knownInherited = false) {
         this.members.set(org,node); this.liveForms.add(node.id);
+        if (!node.population && node.extinctionTick!==null) this.research.event('form-revival',node.id,'Body form reappeared');
         node.population++; this.living++;
         if (founder) { node.founders++; this.initialPopulation++; }
         else { node.totalBirths++; this.totalBirths++; }
@@ -44,10 +49,11 @@ class LineageTracker {
         if (node.population > node.peak) { node.peak = node.population; node.peakTick = this.tick(); }
         if (this.living > this.peak) { this.peak = this.living; this.peakTick = this.tick(); }
         if (node.population === 1) this.point(node.history,this.tick(),1);
+        this.research.join(org,node,parent,knownInherited,founder);
         this.revision++;
     }
     nodeFor(org) { return this.members.get(org); }
-    birth(parent, child) {
+    birth(parent, child, knownInherited = false) {
         if (!this.active || this.members.has(child)) return;
         const node = this.nodeFor(parent); if (!node) return;
         try {
@@ -58,19 +64,22 @@ class LineageTracker {
                 const key = Snapshot.bodyKey(child);
                 if (key !== node.shapeKey) form = this.branches.get(node.id + ':' + key) || this.record(child,node);
             }
-            this.join(child,form);
+            this.join(child,form,false,parent,knownInherited);
         } catch (e) { this.complete = false; this.error = 'Recording incomplete: ' + e.message; this.stop('recording error'); }
     }
     death(org, reason = null) {
         if (!this.active) return;
         const node = this.nodeFor(org); if (!node) return;
+        const deathReason=reason || (this.env.lineage_event_tick==null?'manual intervention':'unknown');
+        this.research.death(org,node,deathReason);
         this.members.delete(org); node.population--; node.totalDeaths++; this.living--; this.revision++;
         if (!node.population) {
             node.extinctionTick = this.tick(); node.extinctionCount++;
-            node.extinctionReason = reason || (this.env.lineage_event_tick == null ? 'manual intervention' : 'simulation');
+            node.extinctionReason = deathReason;
+            this.research.event('form-extinction',node.id,'Body form population reached zero ('+deathReason+')');
             this.liveForms.delete(node.id); this.point(node.history,this.tick(),0);
         }
-        if (!this.living) { this.extinctionTick = this.tick(); this.sample(this.tick(),true); }
+        if (!this.living) { this.extinctionTick = this.tick(); this.research.event('line-extinction',null,'Entire tracked line reached zero'); this.sample(this.tick(),true); }
     }
     point(history,tick,living) {
         const last = history[history.length-1];
@@ -79,21 +88,22 @@ class LineageTracker {
     }
     sample(tick, force = false) {
         if (!this.active || (!force && tick % 100 !== 0)) return;
+        this.research.observeSettings();
         this.point(this.history,tick,this.living);
         for (const id of this.liveForms) { const n=this.byId.get(id); this.point(n.history,tick,n.population); }
         this.revision++;
     }
     stop(reason = 'stopped by user') {
         if (!this.active) return;
-        this.sample(this.tick(),true); this.active=false; this.endedAtTick=this.tick(); this.endReason=reason; this.revision++;
+        this.sample(this.tick(),true); this.research.event('stop',null,reason); this.active=false; this.endedAtTick=this.tick(); this.endReason=reason; this.revision++;
     }
-    intervene(reason) { if (this.active) this.interventions.push({tick:this.tick(),reason}); }
+    intervene(reason) { if (this.active) {this.interventions.push({tick:this.tick(),reason});this.research.event('intervention',null,reason);} }
     exportNode(id) {
         const node=this.byId.get(id); if (!node) throw new Error('Unknown form ID');
         return Snapshot.exportOrganism(this.genomes[node.genomeId],node.species);
     }
     serialize() {
-        const archive={version:2}; for (const key of fields) archive[key]=this[key]; return Snapshot.copy(archive);
+        const archive={version:3}; for (const key of fields) archive[key]=this[key]; archive.research=this.research.serialize(); return Snapshot.copy(archive);
     }
     load(raw, tags = new Map()) {
         this.clear(); if (!raw) return;
@@ -105,7 +115,7 @@ class LineageTracker {
                 if (!Array.isArray(h)) fail(); let last=-1;
                 for (const p of h) { if (!uint(p.tick)||p.tick<=last||!uint(p.living)) fail(); last=p.tick; }
             };
-            if (data.version!==2 || !['species','legacy-subset'].includes(data.scope) || !Array.isArray(data.nodes) || !Array.isArray(data.genomes) || !Array.isArray(data.interventions)) fail();
+            if (![2,3].includes(data.version) || !['species','legacy-subset'].includes(data.scope) || !Array.isArray(data.nodes) || !Array.isArray(data.genomes) || !Array.isArray(data.interventions)) fail();
             for (const k of ['session','nextId','initialPopulation','totalBirths','living','peak']) if (!uint(data[k])) fail();
             if (!data.session || !data.nextId || data.peak<data.living || data.peak>data.initialPopulation+data.totalBirths || typeof data.active!=='boolean' || typeof data.complete!=='boolean') fail();
             for (const k of ['peakTick','extinctionTick','endedAtTick']) if (data[k]!==null&&!uint(data[k])) fail();
@@ -143,6 +153,8 @@ class LineageTracker {
             this.children=new Map(this.nodes.map(n=>[n.id,[]]));
             this.liveForms=new Set(this.nodes.filter(n=>n.population>0).map(n=>n.id));
             for (const n of this.nodes) if (n.parentId!==null) this.children.get(n.parentId).push(n.id);
+            if (data.version===3 && !data.research) fail();
+            this.research.load(data.research,tags);
             this.revision++;
         } catch(e) {
             this.clear(); this.complete=false; this.error='Lineage archive rejected; world loaded without tracking. '+e.message;

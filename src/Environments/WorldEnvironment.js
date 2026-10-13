@@ -230,6 +230,8 @@ class WorldEnvironment extends Environment{
             const node = this.lineage.nodeFor(org);
             raw.lineage_id = node ? node.id : null;
             raw.lineage_session = node ? this.lineage.session : null;
+            const brain = this.lineage.research.members.get(org);
+            raw.lineage_brain = brain ? brain.id : null;
             env.organisms.push(raw);
 // TADIWA EDIT END: explicit world organism tags
         }
@@ -267,7 +269,7 @@ class WorldEnvironment extends Environment{
             let org = new Organism(orgRaw.col, orgRaw.row, this);
             org.loadRaw(orgRaw);
 // TADIWA EDIT START: restore nullable identity explicitly
-            lineageTags.set(org, {id: orgRaw.lineage_id, session: orgRaw.lineage_session});
+            lineageTags.set(org, {id: orgRaw.lineage_id, session: orgRaw.lineage_session, brain: orgRaw.lineage_brain});
 // TADIWA EDIT END: restore nullable identity explicitly
             this.addOrganism(org);
             let s = species[orgRaw.species_name];

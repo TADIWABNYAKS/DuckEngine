@@ -41,6 +41,25 @@ function bodyKey(form) {
     return JSON.stringify(form.anatomy.cells.map(c => [c.loc_col, c.loc_row, c.state.name,
         c.state.name === 'eye' ? c.direction : null]).sort((a,b) => a[0]-b[0] || a[1]-b[1] || a[2].localeCompare(b[2])));
 }
+function brainChanges(before, after) {
+    const changes=[];
+    if (!before) return ['First observed active brain; earlier active-brain history unknown.'];
+    if (before.brain.independent_eye_decisions!==after.brain.independent_eye_decisions) changes.push(`Independent eyes: ${before.brain.independent_eye_decisions} → ${after.brain.independent_eye_decisions}`);
+    const labels=['neutral','retreat','chase','move left','move right','stop','turn left','turn right'];
+    for(let e=0;e<Math.max(before.brain.decisions.length,after.brain.decisions.length);e++) {
+        const a=before.brain.decisions[e]||[],b=after.brain.decisions[e]||[];
+        for(let s=0;s<Math.max(a.length,b.length);s++) {
+            if(!a[s]||!b[s]) {changes.push(`Eye ${e+1}, state ${s}: ${a[s]?'removed':'added'}`);continue;}
+            for(const type of Object.keys(b[s])) if(canonical(a[s][type])!==canonical(b[s][type])) {
+                const x=a[s][type],y=b[s][type];
+                changes.push(`Eye ${e+1}, state ${s}, ${type}: ${labels[x.decision]} / state ${x.state} → ${labels[y.decision]} / state ${y.state}`);
+            }
+        }
+    }
+    const eyes=form=>form.anatomy.cells.filter(c=>c.state.name==='eye').map(c=>[c.loc_col,c.loc_row,c.direction]);
+    if(canonical(eyes(before))!==canonical(eyes(after)))changes.push('Eye layout, orientation or mapping order changed.');
+    return changes.length?changes:['Inherited decision maps unchanged.'];
+}
 function validate(form) {
     const fail = () => { throw new Error("Invalid representative snapshot"); };
     if (!form.anatomy || !Array.isArray(form.anatomy.cells) || !form.anatomy.cells.length || !form.brain || !Array.isArray(form.brain.decisions) || !Number.isFinite(form.move_range) || !Number.isFinite(form.mutability)) fail();
@@ -57,5 +76,5 @@ function validate(form) {
     }
 }
 
-module.exports = {copy, canonical, capture, exportOrganism, compare, bodyKey, validate};
+module.exports = {copy, canonical, capture, exportOrganism, compare, bodyKey, brainChanges, validate};
 // TADIWA EDIT END: immutable inherited forms and editor-compatible exports

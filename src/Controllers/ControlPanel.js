@@ -29,6 +29,10 @@ class ControlPanel {
         this.paused=false;
         this.setHyperparamDefaults();
         LoadController.control_panel = this;
+// TADIWA EDIT START: timeline of user changes to experiment settings
+        $(document).on('change.lineage', '.tab input, .tab select', () => this.engine.env.lineage.research.observeSettings());
+        $('#reset-rules').on('click.lineage', () => this.engine.env.lineage.research.observeSettings());
+// TADIWA EDIT END: timeline of user changes to experiment settings
     }
 
     defineMinMaxControls(){
@@ -439,6 +443,9 @@ class ControlPanel {
             reader.onload = (e) => {
                 let result=JSON.parse(e.target.result);
                 Hyperparams.loadJsonObj(result);
+// TADIWA EDIT START: loaded experiment settings event
+                this.engine.env.lineage.research.observeSettings();
+// TADIWA EDIT END: loaded experiment settings event
                 this.updateHyperparamUIValues();
                 // have to clear the value so change() will be triggered if the same file is uploaded again
                 $('#upload-hyperparams')[0].value = '';

@@ -75,7 +75,13 @@ class Organism {
             }
         } 
         var mutated = false;
+// TADIWA EDIT START: avoid comparing brains on unchanged biological inheritance
+        let lineageMutationAttempted = false;
+// TADIWA EDIT END: avoid comparing brains on unchanged biological inheritance
         if (this.calcRandomChance(prob)) {
+// TADIWA EDIT START: possible inherited brain change
+            lineageMutationAttempted = true;
+// TADIWA EDIT END: possible inherited brain change
             mutated = org.mutate();
         }
 
@@ -102,7 +108,7 @@ class Organism {
                 org.species.addPop();
             }
 // TADIWA EDIT START: successful biological birth
-            if (this.env.lineage && this.env.lineage.active) this.env.lineage.birth(this, org);
+            if (this.env.lineage && this.env.lineage.active) this.env.lineage.birth(this, org, !lineageMutationAttempted);
 // TADIWA EDIT END: successful biological birth
         }
         Math.max(this.food_collected -= this.foodNeeded(), 0);
@@ -286,13 +292,17 @@ class Organism {
     harm() {
         this.damage++;
         if (this.damage >= this.maxHealth() || Hyperparams.instaKill) {
-            this.die();
+// TADIWA EDIT START: record the actual lethal damage path
+            this.die('lethal-damage');
+// TADIWA EDIT END: record the actual lethal damage path
         }
     }
 
-    die() {
+// TADIWA EDIT START: explicit observed death cause
+    die(reason = null) {
+// TADIWA EDIT END: explicit observed death cause
 // TADIWA EDIT START: idempotent death observation
-        if (this.env.lineage && this.env.lineage.active) this.env.lineage.death(this);
+        if (this.env.lineage && this.env.lineage.active) this.env.lineage.death(this, reason);
 // TADIWA EDIT END: idempotent death observation
         for (var cell of this.anatomy.cells) {
             var real_c = this.c + cell.rotatedCol(this.rotation);
@@ -314,7 +324,9 @@ class Organism {
     update() {
         this.lifetime++;
         if (this.lifetime > this.lifespan()) {
-            this.die();
+// TADIWA EDIT START: record the actual age limit path
+            this.die('age-limit');
+// TADIWA EDIT END: record the actual age limit path
             return this.living;
         }
         if (this.food_collected >= this.foodNeeded()) {
@@ -423,13 +435,14 @@ class Organism {
         // Generic organism exports never carry world identity.
         delete org.lineage_id;
         delete org.lineage_session;
+        delete org.lineage_brain;
 // TADIWA EDIT END: separate standalone exports from world tags
         return org;
     }
 
     loadRaw(org) {
 // TADIWA EDIT START: world tags are not organism properties or inherited editor data
-        const {lineage_id, lineage_session, ...form} = org;
+        const {lineage_id, lineage_session, lineage_brain, ...form} = org;
         SerializeHelper.overwriteNonObjects(form, this);
 // TADIWA EDIT END: world tags are not organism properties or inherited editor data
         this.anatomy.loadRaw(org.anatomy)
