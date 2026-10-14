@@ -24,7 +24,7 @@ class LineageTracker {
         for (const member of this.env.organisms) if (member.living && member.species === org.species) {
             this.join(member, root, true);
         }
-        this.sample(this.tick(), true);
+        this.sample(this.tick(), true); this.research.environment.sample(this.tick());
     }
     record(org, parent) {
         const form = Snapshot.capture(org), shapeKey = Snapshot.bodyKey(form);
@@ -89,13 +89,14 @@ class LineageTracker {
     sample(tick, force = false) {
         if (!this.active || (!force && tick % 100 !== 0)) return;
         this.research.observeSettings();
+        if (!force) this.research.environment.sample(tick);
         this.point(this.history,tick,this.living);
         for (const id of this.liveForms) { const n=this.byId.get(id); this.point(n.history,tick,n.population); }
         this.revision++;
     }
     stop(reason = 'stopped by user') {
         if (!this.active) return;
-        this.sample(this.tick(),true); this.research.event('stop',null,reason); this.active=false; this.endedAtTick=this.tick(); this.endReason=reason; this.revision++;
+        this.sample(this.tick(),true); this.research.environment.sample(this.tick()); this.research.event('stop',null,reason); this.active=false; this.endedAtTick=this.tick(); this.endReason=reason; this.revision++;
     }
     intervene(reason) { if (this.active) {this.interventions.push({tick:this.tick(),reason});this.research.event('intervention',null,reason);} }
     exportNode(id) {

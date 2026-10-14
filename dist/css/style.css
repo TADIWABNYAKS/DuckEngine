@@ -524,7 +524,7 @@ input:hover,input:active {
 .lineage-panel p { margin: 6px 0; }
 .lineage-panel button { width: auto; height: auto; min-height: 30px; margin: 3px; padding: 5px 9px; background: var(--btn); color: #18202b; border: 1px solid var(--border); border-radius: 8px; cursor: pointer; font: inherit; }
 .lineage-panel button:hover, .lineage-panel button:focus-visible { background: var(--btn-hover); outline: 2px solid var(--tab-active); }
-.lineage-panel input { width: 120px; padding: 7px; color: #142333; background: white; }
+.lineage-panel input { width: 210px; padding: 7px; color: #142333; background: white; }
 .lineage-actions { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
 .lineage-message { color: #784b00; }
 .lineage-panel > canvas { width: 100%; height: 120px; background: #f5f6fa; }
@@ -552,4 +552,7 @@ input:hover,input:active {
 .lineage-legend { font-size: 12px; color: #414b61; }
 .lineage-research-form { margin-top: 14px; padding-top: 10px; border-top: 2px solid var(--tab-active); }
 .lineage-panel li, .lineage-event { overflow-wrap: anywhere; }
+.lineage-environment { margin: 8px 0; }
+.lineage-environment canvas { display: block; width: 100%; height: 160px; background: #f5f6fa; margin-top: 6px; }
+.lineage-actions [hidden], .lineage-environment[hidden] { display: none; }
 /* TADIWA EDIT END: bounded lineage tree and ancestor inspector */

@@ -68,7 +68,6 @@ class LineageInsights {
         const r=this.research(),host=this.panel.inspector;
         if(!this.formHost||!host.contains(this.formHost)){
             this.formHost=el('section',undefined,'lineage-research-form');this.formHost.append(el('h4','Rates & observed death causes'));this.causes=el('p');this.formHost.append(this.causes);
-            this.formHost.append(el('small','Age limit and lethal damage are direct engine paths. Manual removals are separate; no starvation cause is inferred.'));
             this.formHost.append(el('h4','Active brain versions'));this.brainList=el('div');this.brainDetails=el('div');this.formHost.append(this.brainList,this.brainDetails);host.append(this.formHost);this.formKey=null;
         }
         const m=r.metricMap.get(node.id),c=m?m.causes:{};
@@ -78,7 +77,7 @@ class LineageInsights {
         const key=`${node.id}:${versions.length}:${this.brainPage}:${this.brainId}`;
         if(this.formKey!==key){
             this.formKey=key;this.brainList.replaceChildren();this.brainDetails.replaceChildren();
-            if(!versions.length){this.brainList.append(el('p','No active brain recorded for this form. Active brains require movers and eyes; unused maps stay in the body representative.'));return;}
+            if(!versions.length){this.brainList.append(el('p','No active brain recorded.'));return;}
             this.brainList.append(el('small','Inherited decision maps and eye mapping; momentary brain state is not a mutation. Versions keep their first observed body and settings.'));
             const select=el('select');select.setAttribute('aria-label','Brain version');
             const visible=versions.slice(this.brainPage*20,this.brainPage*20+20);
@@ -107,8 +106,9 @@ class LineageInsights {
     }
     drawRates(){
         const p=this.panel,r=this.research(),t=p.env.lineage,ctx=p.history.getContext('2d');ctx.clearRect(0,0,820,120);
-        if(r.fromTick===null){p.historyCaption.textContent='Rates begin when tracking starts.';return;}
+        if(r.fromTick===null){p.chartRange=null;p.historyCaption.textContent='Rates begin when tracking starts.';return;}
         const now=t.active?t.tick():t.endedAtTick,first=r.fromTick,last=Math.max(first,now),lastIndex=Math.floor((last-first)/100)-1;
+        p.chartRange={first,last};
         const selected=this.scope.value==='form'?p.selected:null;
         const m=r.metricMap.get(selected||0),data=m?m.buckets.filter(b=>b.index<=lastIndex):[];
         const max=Math.max(1,data.reduce((v,b)=>Math.max(v,b.births,b.deaths),0));

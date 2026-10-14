@@ -2,7 +2,7 @@
 const Snapshot = require('../Stats/LineageSnapshot');
 const thumbnail = require('../Rendering/LineageThumbnail');
 const Insights = require('./LineageInsights');
-const Modes = require('./ControlModes');
+const EnvironmentChart = require('./LineageEnvironmentChart');
 function el(tag, text, className) {
     const element = document.createElement(tag);
     if (text !== undefined) element.textContent = text;
@@ -27,11 +27,9 @@ class LineagePanel {
         this.panel = el('section', undefined, 'lineage-panel');
         this.panel.id = 'lineage-panel'; this.panel.hidden = true; this.panel.setAttribute('aria-label', 'Lineage tracker');
         const header = el('header'); header.append(el('h2', 'Species mutation tree'), button('Close lineage', () => this.hide()));
-        const help = el('p', 'Select a living creature to track every current member of its engine species and their future descendants. Only visible body changes (including eye direction) branch; active brain versions are recorded within each form. Unchanged births share a population. Later manual clones are excluded; earlier mutated species are unknown. Previews and downloads preserve the first observed representative of each form.');
+        const help = el('p', "Select a living creature, then use the editor's Track species icon. Branches show body changes.");
         const actions = el('div', undefined, 'lineage-actions');
-        actions.append(button('Select creature', () => { this.hide(); this.engine.controlpanel.setMode(Modes.Select); }),
-            button('Track species', () => this.track()),
-            button('Stop recording', () => { this.env.lineage.stop(); this.render(true); }),
+        actions.append(button('Stop recording', () => { this.env.lineage.stop(); this.render(true); }),
             button('Download lineage archive', () => download(this.env.lineage.serialize(), 'lineage-archive.json')),
             button('Clear archive', () => { if (this.discardConfirmed()) { this.env.lineage.clear(); this.render(true); } }));
         this.message = el('p', '', 'lineage-message'); this.message.setAttribute('role', 'status');
@@ -40,17 +38,34 @@ class LineagePanel {
         this.history.setAttribute('aria-label', 'Whole lineage and selected form population over recorded ticks');
         this.historyCaption = el('p', '', 'lineage-history-caption');
         this.insights = new Insights(this, download);
+        this.environmentChart = new EnvironmentChart(this);
         const navigation = el('div', undefined, 'lineage-actions');
-        this.lookup = el('input'); this.lookup.type = 'number'; this.lookup.min = 1; this.lookup.placeholder = 'Form ID'; this.lookup.setAttribute('aria-label', 'Form ID');
-        const find = () => { const id = Number(this.lookup.value); if (this.env.lineage.byId.has(id)) this.navigate(id); else this.message.textContent = 'No recorded form with that ID.'; };
+        this.lookup = el('input'); this.lookup.type = 'text'; this.lookup.placeholder = 'Form ID or species name'; this.lookup.setAttribute('aria-label', 'Form ID or species name');
+        this.searchMatches = el('select'); this.searchMatches.hidden = true; this.searchMatches.setAttribute('aria-label', 'Matching forms');
+        this.searchMatches.onchange = () => this.navigate(Number(this.searchMatches.value));
+        const find = () => {
+            const query = this.lookup.value.trim().toLowerCase(), t = this.env.lineage;
+            this.searchMatches.hidden = true; this.searchMatches.replaceChildren();
+            if (!query) { this.message.textContent = 'Enter a form ID or species name.'; return; }
+            const id = /^#?\d+$/.test(query) ? Number(query.replace('#','')) : null;
+            let matches = id !== null && t.byId.has(id) ? [t.byId.get(id)] : t.nodes.filter(n => n.species.toLowerCase() === query);
+            if (!matches.length) matches = t.nodes.filter(n => n.species.toLowerCase().includes(query));
+            if (!matches.length) { this.message.textContent = 'No matching recorded form.'; return; }
+            this.navigate(matches[0].id);
+            if (matches.length > 1) {
+                for (const n of matches) { const option = el('option', `Form #${n.id} · ${n.species}`); option.value = n.id; this.searchMatches.append(option); }
+                this.searchMatches.hidden = false;
+            }
+            this.message.textContent = matches.length > 1 ? `${matches.length} matching forms.` : `Form #${matches[0].id} · ${matches[0].species}`;
+        };
         this.lookup.onkeydown = e => { if (e.key === 'Enter') find(); e.stopPropagation(); };
         navigation.append(button('Root', () => this.navigate(this.env.lineage.rootId)), button('Parent branch', () => {
             const n = this.env.lineage.byId.get(this.focus); if (n && n.parentId) this.navigate(n.parentId);
-        }), this.lookup, button('Find form', find), button('Collapse branches', () => { this.expanded.clear(); this.render(true); }));
+        }), this.lookup, button('Find form', find), this.searchMatches, button('Collapse branches', () => { this.expanded.clear(); this.render(true); }));
         this.tree = el('div', undefined, 'lineage-tree'); this.tree.setAttribute('aria-label', 'Visible body mutation tree');
         this.inspector = el('aside', undefined, 'lineage-inspector'); this.inspector.setAttribute('aria-label', 'Selected body form');
         const body = el('div', undefined, 'lineage-body'); body.append(this.tree, this.inspector);
-        this.panel.append(header, help, actions, this.message, this.summary, this.insights.rates, this.insights.chartControls, this.history, this.historyCaption, this.insights.events, navigation, body);
+        this.panel.append(header, help, actions, this.message, this.summary, this.insights.rates, this.insights.chartControls, this.history, this.historyCaption, this.environmentChart.element, this.insights.events, navigation, body);
         // Prevent existing simulation hotkeys from interpreting text entry in this panel.
         this.panel.addEventListener('keydown', e => e.stopPropagation());
         document.body.append(this.panel);
@@ -70,7 +85,7 @@ class LineagePanel {
             this.message.textContent = 'Select a living creature in the current world first. A dead or previously loaded selection cannot be tracked.'; return;
         }
         if (!this.discardConfirmed()) return;
-        try { this.env.lineage.start(org); this.message.textContent = 'Recording all current members of this species and their future mutated forms.'; this.render(true); }
+        try { this.env.lineage.start(org); this.render(true); this.message.textContent = 'Recording all current members of this species and their future mutated forms.'; }
         catch (e) { this.message.textContent = e.message; }
     }
     show() {
@@ -99,7 +114,7 @@ class LineagePanel {
         if (!this.open) return;
         const t = this.env.lineage;
         if (this.archive !== t.nodes) {
-            this.lookup.value = '';
+            this.message.textContent = ''; this.lookup.value = ''; this.searchMatches.hidden = true; this.searchMatches.replaceChildren();
             this.archive = t.nodes; this.selected = this.focus = t.rootId; this.expanded.clear(); this.pages.clear(); this.thumbnails.clear(); this.inspectedKey = null; this.treeKey = null;
             if (t.rootId) this.expanded.add(t.rootId);
             force = true;
@@ -110,7 +125,7 @@ class LineagePanel {
         this.summary.textContent = t.nodes.length ? `${t.active ? 'Recording' : 'Recording ended'} · ${t.initialPopulation} starting member${t.initialPopulation===1?'':'s'} · ${t.living} ${t.active ? 'living' : 'last observed living'} across ${legacy ? 'the legacy subset' : 'the entire line'} · ${t.totalBirths} births · ${t.nodes.length} visible forms · Peak ${t.peak} at tick ${t.peakTick} · ${t.extinctionTick === null ? (legacy ? 'Subset extinction not observed' : 'Whole-line extinction not observed') : (legacy ? 'Legacy subset extinct at tick ' : 'ENTIRE LINE EXTINCT at tick ') + t.extinctionTick}${t.complete ? '' : ' · INCOMPLETE RECORDING'}${t.endReason ? ' · ' + t.endReason : ''}${t.interventions.length ? ' · Interventions: ' + t.interventions.map(i => i.reason + ' at ' + i.tick).join('; ') : ''}` : 'No species recorded yet.';
         if (t.migrationMessage) this.message.textContent = t.migrationMessage;
         if (t.error) this.message.textContent = t.error;
-        this.insights.update(); this.drawHistory(); this.drawTree(); this.inspect();
+        this.insights.update(); this.drawHistory(); this.environmentChart.draw(this.chartRange); this.drawTree(); this.inspect();
     }
     drawTree() {
         const t = this.env.lineage;
@@ -175,7 +190,6 @@ class LineagePanel {
             button('Open representative in editor', () => { this.engine.organism_editor.controller.loadOrg(t.exportNode(n.id)); this.hide(); $('#maximize').click(); $('.tabnav #editor').click(); }),
             button('View mutated forms from #' + n.id, () => this.navigate(n.id)));
         if (parent) this.inspector.append(button('Inspect parent form #' + parent.id, () => { this.selected = parent.id; this.render(true); }), el('h4', 'Parent form #' + parent.id), this.preview(parent.genomeId, 140));
-        this.inspector.append(el('p', 'Body form representative: brain, movement range and mutability are from its first observed member. Active brain versions below record inherited changes without creating body branches. Extinction of this form alone is not whole-line extinction.'));
         this.inspector.append(el('p', `Movement range: ${pform ? pform.move_range + ' → ' : ''}${form.move_range} · Mutability: ${pform ? pform.mutability + ' → ' : ''}${form.mutability}`));
         const changes = Snapshot.compare(pform, form);
         for (const [title, values] of [['Body comparison', changes.body], ['Brain comparison', changes.brain]]) {
@@ -189,8 +203,9 @@ class LineagePanel {
         if (this.insights.mode.value === 'rates') { this.insights.drawRates(); return; }
         const t = this.env.lineage, data = t.history, ctx = this.history.getContext('2d');
         ctx.clearRect(0, 0, 820, 120);
-        if (!data.length) { this.historyCaption.textContent = 'Population history is sampled every 100 completed ticks.'; return; }
+        if (!data.length) { this.chartRange = null; this.historyCaption.textContent = 'Population history is sampled every 100 completed ticks.'; return; }
         const first = data[0].tick, last = Math.max(data[data.length - 1].tick, t.research.events.at(-1)?.tick || 0), max = Math.max(1, t.peak);
+        this.chartRange = {first, last};
         ctx.strokeStyle = '#246c52'; ctx.beginPath();
         // Each horizontal bin retains its min/max; full history stays in the archive.
         const bins = new Map();

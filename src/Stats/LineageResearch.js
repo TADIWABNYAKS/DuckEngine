@@ -1,5 +1,6 @@
 // TADIWA EDIT START: event counters, active brain versions and experiment timeline
 const S = require('./LineageSnapshot');
+const Environment = require('./LineageEnvironment');
 const Hyper = require('../Hyperparameters');
 const Config = require('../WorldConfig');
 const CAUSES = ['age-limit','lethal-damage','manual-removal','unknown'];
@@ -18,6 +19,7 @@ function settings() {
 }
 class LineageResearch {
     constructor(tracker) {
+        this.environment=new Environment(tracker);
         this.tracker=tracker; this.fromTick=null; this.events=[]; this.variants=[]; this.metrics=[];
         this.metricMap=new Map(); this.variantKeys=new Map(); this.byVariant=new Map(); this.members=new WeakMap();
         this.eventTick=null; this.eventKeys=new Map(); this.controls={}; this.formVariants=new Map(); this.eventRevision=0;
@@ -103,7 +105,7 @@ class LineageResearch {
         return S.exportOrganism(v.snapshot,this.tracker.byId.get(v.nodeId).species);
     }
     serialize() {
-        return S.copy({fromTick:this.fromTick,events:this.events,variants:this.variants,controls:this.controls,
+        return S.copy({fromTick:this.fromTick,events:this.events,variants:this.variants,controls:this.controls,environment:this.environment.serialize(),
             metrics:this.metrics.map(({index,...m})=>m)});
     }
     load(raw,tags) {
@@ -113,6 +115,7 @@ class LineageResearch {
             this.begin(true);
             for(const n of t.nodes)this.metric(n.id);
             if(t.active)for(const org of t.env.organisms){const n=t.nodeFor(org);if(n)this.join(org,n,null,false,true);}
+            this.environment.load(null);
             return;
         }
         const d=S.copy(raw),fail=()=>{throw new Error('Invalid research archive');},uint=n=>Number.isSafeInteger(n)&&n>=0;
@@ -157,6 +160,7 @@ class LineageResearch {
             }else if(tag&&tag.brain!=null)fail();
         }
         if(t.active)for(const v of this.variants)if((counts.get(v.id)||0)!==v.population)fail();
+        this.environment.load(d.environment);
     }
 }
 LineageResearch.activeBrain=activeBrain;
