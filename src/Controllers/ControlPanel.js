@@ -344,6 +344,12 @@ class ControlPanel {
     }
 
     defineHyperparameterControls() {
+        for (const key of ['pollenFoodProb', 'pollenDelayTicks', 'pollenReproductionProb', 'plantLifespanFactor']) {
+            $('#' + key).on('change blur', () => {
+                Hyperparams.setPollenControl(key, $('#' + key).val());
+                $('#' + key).val(Hyperparams[key]);
+            });
+        }
         $('#food-prod-prob').change(function() {
             Hyperparams.foodProdProb = $('#food-prod-prob').val();
         }.bind(this));
@@ -487,6 +493,7 @@ class ControlPanel {
     }
 
     updateHyperparamUIValues(){
+        for (const key of ['pollenFoodProb', 'pollenDelayTicks', 'pollenReproductionProb', 'plantLifespanFactor']) $('#' + key).val(Hyperparams[key]);
         $('#food-prod-prob').val(Hyperparams.foodProdProb);
         $('#lifespan-multiplier').val(Hyperparams.lifespanMultiplier);
         $('#rot-enabled').prop('checked', Hyperparams.rotationEnabled);

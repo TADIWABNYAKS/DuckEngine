@@ -2,7 +2,7 @@
 const S=require('../Stats/LineageSnapshot');
 function el(tag,text,cls){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;}
 function button(text,fn){const b=el('button',text);b.type='button';b.onclick=fn;return b;}
-const colors={start:'#416788','body-mutation':'#7230DB','brain-version':'#355a93','brain-change':'#355a93','form-extinction':'#a22656','line-extinction':'#a22656','form-revival':'#246c52',intervention:'#905000',settings:'#905000',stop:'#596077',upgrade:'#596077'};
+const colors={start:'#416788','body-mutation':'#7230DB','brain-version':'#355a93','brain-change':'#355a93','form-extinction':'#a22656','line-extinction':'#a22656','form-revival':'#246c52',intervention:'#905000',settings:'#905000',stop:'#596077',upgrade:'#596077',season:'#905000','line-dormant':'#905000','line-revival':'#246c52'};
 class LineageInsights {
     constructor(panel,download){
         this.panel=panel;this.download=download;this.page=0;this.brainPage=0;this.brainId=null;this.markers=[];
@@ -15,9 +15,9 @@ class LineageInsights {
         for(const [value,text] of [['whole','Whole line rates'],['form','Selected form rates']]){const o=el('option',text);o.value=value;this.scope.append(o);}
         this.scope.onchange=()=>panel.render(true);
         this.filter=el('select');this.filter.setAttribute('aria-label','Event filter');
-        for(const [value,text] of [['all','All events'],['body','Body mutations'],['brain','Brain versions / changes'],['extinction','Extinctions'],['intervention','Settings / interventions']]){const o=el('option',text);o.value=value;this.filter.append(o);}
+        for(const [value,text] of [['all','All events'],['body','Body mutations'],['brain','Brain versions / changes'],['extinction','Extinctions'],['season','Season changes'],['intervention','Settings / interventions']]){const o=el('option',text);o.value=value;this.filter.append(o);}
         this.mode.onchange=()=>panel.render(true);this.filter.onchange=()=>{this.page=0;this.eventKey=null;panel.render(true);};
-        this.chartControls.append(this.mode,this.scope,this.filter,el('span','Markers: purple body · blue brain · red extinction · amber intervention','lineage-legend'));
+        this.chartControls.append(this.mode,this.scope,this.filter,el('span','Markers: purple body · blue brain · red extinction · amber environment','lineage-legend'));
         this.events=el('details',undefined,'lineage-events');this.eventSummary=el('summary','Events & interventions');this.eventList=el('div');this.eventNav=el('div',undefined,'lineage-actions');
         this.events.append(this.eventSummary,this.eventList,this.eventNav);
         panel.history.onclick=e=>{
@@ -33,7 +33,7 @@ class LineageInsights {
         const r=this.research(),key=`${r.eventRevision}:${r.events.length}:${this.filter.value}`;
         if(this.filterArchive===r && this.filterKey===key)return this.filteredEvents;
         this.filterArchive=r;this.filterKey=key;
-        this.filteredEvents=r.events.filter(e=>this.filter.value==='all'||(this.filter.value==='body'?e.type==='body-mutation':this.filter.value==='brain'?e.type.startsWith('brain'):this.filter.value==='extinction'?e.type.endsWith('extinction'):['settings','intervention','stop','upgrade'].includes(e.type)));
+        this.filteredEvents=r.events.filter(e=>this.filter.value==='all'||(this.filter.value==='body'?e.type==='body-mutation':this.filter.value==='brain'?e.type.startsWith('brain'):this.filter.value==='extinction'?e.type.endsWith('extinction')||['line-dormant','line-revival'].includes(e.type):this.filter.value==='season'?e.type==='season':['settings','intervention','stop','upgrade'].includes(e.type)));
         return this.filteredEvents;
     }
     rateText(id,label){

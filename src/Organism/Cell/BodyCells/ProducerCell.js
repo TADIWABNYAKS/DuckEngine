@@ -24,6 +24,12 @@ class ProducerCell extends BodyCell{
             var cell = env.grid_map.cellAt(real_c+loc_c, real_r+loc_r);
             if (cell != null && cell.state == CellStates.empty){
                 env.changeCell(real_c+loc_c, real_r+loc_r, CellStates.food, null);
+// TADIWA EDIT START: retain pollen production chance and register the actual food packet
+                if (this.org.isPlant() && this.org.calcRandomChance(Hyperparams.pollenFoodProb)) {
+                    cell.pollen = this.org.createPollen();
+                    if(env.lineage&&env.lineage.active)env.lineage.pollen.addFood(cell);
+                }
+// TADIWA EDIT END: retain pollen production chance and register the actual food packet
                 return;
             }
         }

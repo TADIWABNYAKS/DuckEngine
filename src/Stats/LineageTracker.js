@@ -2,6 +2,7 @@
 const Snapshot = require('./LineageSnapshot');
 const migrate = require('./LineageMigration');
 const Research = require('./LineageResearch');
+const Pollen = require('./LineagePollen');
 const fields = ['session','scope','nodes','genomes','history','interventions','nextId','rootId','active','complete','initialPopulation','totalBirths','living','peak','peakTick','extinctionTick','endedAtTick','endReason','error','migrationMessage'];
 class LineageTracker {
     constructor(env) { this.env = env; this.session = 0; this.clear(); }
@@ -14,7 +15,7 @@ class LineageTracker {
         this.initialPopulation = this.totalBirths = this.living = this.peak = 0;
         this.peakTick = this.extinctionTick = this.endedAtTick = this.endReason = this.error = this.migrationMessage = null;
         this.revision = 0;
-        this.research = new Research(this);
+        this.research = new Research(this); this.pollen = new Pollen(this);
     }
     tick() { return this.env.lineage_event_tick == null ? this.env.total_ticks : this.env.lineage_event_tick; }
     start(org) {
@@ -24,6 +25,7 @@ class LineageTracker {
         for (const member of this.env.organisms) if (member.living && member.species === org.species) {
             this.join(member, root, true);
         }
+        this.pollen.rebuild(true);
         this.sample(this.tick(), true); this.research.environment.sample(this.tick());
     }
     record(org, parent) {
@@ -40,7 +42,8 @@ class LineageTracker {
         return node;
     }
     join(org, node, founder = false, parent = null, knownInherited = false) {
-        this.members.set(org,node); this.liveForms.add(node.id);
+        if (!this.living && (this.extinctionTick!==null || this.pollen.dormant)) this.research.event('line-revival',null,'Tracked line resumed through biological reproduction');
+        this.pollen.dormant=false; this.members.set(org,node); this.liveForms.add(node.id);
         if (!node.population && node.extinctionTick!==null) this.research.event('form-revival',node.id,'Body form reappeared');
         node.population++; this.living++;
         if (founder) { node.founders++; this.initialPopulation++; }
@@ -53,9 +56,9 @@ class LineageTracker {
         this.revision++;
     }
     nodeFor(org) { return this.members.get(org); }
-    birth(parent, child, knownInherited = false) {
+    birth(parent, child, knownInherited = false, pollenOrigin = null) {
         if (!this.active || this.members.has(child)) return;
-        const node = this.nodeFor(parent); if (!node) return;
+        const node = this.nodeFor(parent) || this.pollen.nodeFor(pollenOrigin,parent); if (!node) return;
         try {
             let form = node;
             // Engine species identity is retained for unchanged bodies, including brain/rate drift.
@@ -79,7 +82,19 @@ class LineageTracker {
             this.research.event('form-extinction',node.id,'Body form population reached zero'+(deathReason?' ('+deathReason+')':''));
             this.liveForms.delete(node.id); this.point(node.history,this.tick(),0);
         }
-        if (!this.living) { this.extinctionTick = this.tick(); this.research.event('line-extinction',null,'Entire tracked line reached zero'); this.sample(this.tick(),true); }
+        if (!this.living) this.updateFate();
+    }
+    updateFate() {
+        if(!this.active||!this.nodes.length)return;
+        if(this.living){this.extinctionTick=null;this.pollen.dormant=false;return;}
+        if(this.pollen.pending){
+            this.extinctionTick=null;
+            if(!this.pollen.dormant)this.research.event('line-dormant',null,'No living members; tracked pollen remains');
+            this.pollen.dormant=true;
+        }else{
+            if(this.extinctionTick===null){this.extinctionTick=this.tick();this.research.event('line-extinction',null,'No living members or tracked pollen remain');this.sample(this.tick(),true);}
+            this.pollen.dormant=false;
+        }
     }
     point(history,tick,living) {
         const last = history[history.length-1];
@@ -104,7 +119,7 @@ class LineageTracker {
         return Snapshot.exportOrganism(this.genomes[node.genomeId],node.species);
     }
     serialize() {
-        const archive={version:3}; for (const key of fields) archive[key]=this[key]; archive.research=this.research.serialize(); return Snapshot.copy(archive);
+        const archive={version:4,pollen:this.pollen.serialize()}; for (const key of fields) archive[key]=this[key]; archive.research=this.research.serialize(); return Snapshot.copy(archive);
     }
     load(raw, tags = new Map()) {
         this.clear(); if (!raw) return;
@@ -116,7 +131,7 @@ class LineageTracker {
                 if (!Array.isArray(h)) fail(); let last=-1;
                 for (const p of h) { if (!uint(p.tick)||p.tick<=last||!uint(p.living)) fail(); last=p.tick; }
             };
-            if (![2,3].includes(data.version) || !['species','legacy-subset'].includes(data.scope) || !Array.isArray(data.nodes) || !Array.isArray(data.genomes) || !Array.isArray(data.interventions)) fail();
+            if (![2,3,4].includes(data.version) || !['species','legacy-subset'].includes(data.scope) || !Array.isArray(data.nodes) || !Array.isArray(data.genomes) || !Array.isArray(data.interventions)) fail();
             for (const k of ['session','nextId','initialPopulation','totalBirths','living','peak']) if (!uint(data[k])) fail();
             if (!data.session || !data.nextId || data.peak<data.living || data.peak>data.initialPopulation+data.totalBirths || typeof data.active!=='boolean' || typeof data.complete!=='boolean') fail();
             for (const k of ['peakTick','extinctionTick','endedAtTick']) if (data[k]!==null&&!uint(data[k])) fail();
@@ -139,8 +154,11 @@ class LineageTracker {
             }
             if (living!==data.living||births!==data.totalBirths||founders!==data.initialPopulation||data.nextId<=data.nodes.reduce((max,n)=>Math.max(max,n.id),0)) fail();
             if (data.nodes.length ? !ids.has(data.rootId) : (data.rootId!==null||data.active||data.genomes.length||data.history.length)) fail();
-            if (data.extinctionTick!==null && (living!==0||!data.nodes.length)) fail();
-            if (data.nodes.length && (!living && data.extinctionTick===null || data.peakTick===null || !data.active && data.endedAtTick===null)) fail();
+            const pollen=data.pollen||{food:0,carriers:0};
+            if(!uint(pollen.food)||!uint(pollen.carriers)||data.version===4&&!data.pollen)fail();
+            const pending=pollen.food+pollen.carriers;
+            if (data.extinctionTick!==null && (living!==0||pending||!data.nodes.length)) fail();
+            if (data.nodes.length && (!living && !pending && data.extinctionTick===null || data.peakTick===null || !data.active && data.endedAtTick===null)) fail();
             const members=new WeakMap(), counts=new Map();
             if (data.active) for (const org of this.env.organisms) {
                 const tag=tags.get(org); if (!tag||tag.id==null) continue;
@@ -154,7 +172,9 @@ class LineageTracker {
             this.children=new Map(this.nodes.map(n=>[n.id,[]]));
             this.liveForms=new Set(this.nodes.filter(n=>n.population>0).map(n=>n.id));
             for (const n of this.nodes) if (n.parentId!==null) this.children.get(n.parentId).push(n.id);
-            if (data.version===3 && !data.research) fail();
+            if (data.version>=3 && !data.research) fail();
+            this.pollen.load(data.pollen);
+            if(data.version<4 && this.pollen.pending && !this.living)this.extinctionTick=null;
             this.research.load(data.research,tags);
             this.revision++;
         } catch(e) {

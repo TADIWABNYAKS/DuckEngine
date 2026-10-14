@@ -5,14 +5,14 @@
 		<title>The Life Engine</title>
 		<link rel="icon" href="./img/icon.png">
 		<!-- TADIWA EDIT START: refresh lineage assets -->
-		<link rel="stylesheet" href="./css/style.css?lineage-v7">
+		<link rel="stylesheet" href="./css/style.css?lineage-merge-v1">
 		<!-- TADIWA EDIT END: refresh lineage assets -->
 		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.2/css/all.min.css">
 		<script type="text/javascript" src="https://canvasjs.com/assets/script/canvasjs.min.js"></script>
 	</head>
 	<body>
 		<!-- TADIWA EDIT START: refresh lineage assets -->
-		<script src="./js/bundle.js?lineage-v7"></script>
+		<script src="./js/bundle.js?lineage-merge-v1"></script>
 		<!-- TADIWA EDIT END: refresh lineage assets -->
 		
 		<div id='env'>
@@ -66,6 +66,7 @@
 							<div class='cell-legend-type' id='killer' title="Killer: Harms organisms in adjacent cells."></div>
 							<div class='cell-legend-type' id='armor' title="Armor: Negates affects of killer cell."></div>
 							<div class='cell-legend-type' id='eye' title="Eye: Observes cells and decides movement."></div>
+							<div class='cell-legend-type' id='pollen-food' title='Pollen food: Normal nutrition plus a chance to carry plant pollen.'></div>
 							<div class='cell-legend-type' id='food' title="Food: Not part of an organism. Once an organism has eaten enough food, it will reproduce."></div>
 							<div class='cell-legend-type' id='wall' title="Wall: Not part of an organism. Blocks movement and reproduction."></div>
 						</div>
@@ -185,6 +186,18 @@
 						<h2>Evolution Controls</h2>
 						<label for="food-prod-prob" title='The probability that a producer cell will produce food each tick.'>Probability of producing food:</label>
 						<input type="number" id="food-prod-prob" min=".001" max="100" value=4 step="1">
+						<br>
+						<label for="pollenFoodProb">Pollen food probability (%):</label>
+						<input type="number" id="pollenFoodProb" min="0" max="100" step="1">
+						<br>
+						<label for="pollenDelayTicks">Pollen delay (ticks):</label>
+						<input type="number" id="pollenDelayTicks" min="1" max="9007199254740991" step="1">
+						<br>
+						<label for="pollenReproductionProb">Pollen reproduction probability (%):</label>
+						<input type="number" id="pollenReproductionProb" min="0" max="100" step="1">
+						<br>
+						<label for="plantLifespanFactor">Plant lifespan factor:</label>
+						<input type="number" id="plantLifespanFactor" min="0.01" max="1" step="0.01">
 						<br>
 						<label for="lifespan-multiplier" title='An organism lives for this many ticks per cell in its body.'>Lifespan multiplier:</label>
 						<input type="number" id="lifespan-multiplier" min="1" max="10000" value=100 step="1">

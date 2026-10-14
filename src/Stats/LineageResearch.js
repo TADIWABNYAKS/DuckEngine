@@ -3,8 +3,9 @@ const S = require('./LineageSnapshot');
 const Environment = require('./LineageEnvironment');
 const Hyper = require('../Hyperparameters');
 const Config = require('../WorldConfig');
+const Seasons = require('../Environments/Seasons');
 const CAUSES = ['age-limit','lethal-damage'];
-const EVENT_TYPES = ['start','body-mutation','brain-version','brain-change','form-extinction','form-revival','line-extinction','intervention','settings','stop','upgrade'];
+const EVENT_TYPES = ['start','body-mutation','brain-version','brain-change','form-extinction','form-revival','line-extinction','intervention','settings','season','line-dormant','line-revival','stop','upgrade'];
 function activeBrain(org) { return org.anatomy.cells.some(c=>c.state.name==='mover') && org.anatomy.cells.some(c=>c.state.name==='eye'); }
 function brainKey(org) {
     return S.canonical({brain:{decisions:org.brain.decisions,independent_eye_decisions:org.brain.independent_eye_decisions},
@@ -22,10 +23,10 @@ class LineageResearch {
         this.environment=new Environment(tracker);
         this.tracker=tracker; this.fromTick=null; this.events=[]; this.variants=[]; this.metrics=[];
         this.metricMap=new Map(); this.variantKeys=new Map(); this.byVariant=new Map(); this.members=new WeakMap();
-        this.eventTick=null; this.eventKeys=new Map(); this.controls={}; this.formVariants=new Map(); this.eventRevision=0;
+        this.season=null; this.eventTick=null; this.eventKeys=new Map(); this.controls={}; this.formVariants=new Map(); this.eventRevision=0;
     }
     begin(upgrade=false) {
-        this.fromTick=this.tracker.tick(); this.controls=settings(); this.metric(0);
+        this.fromTick=this.tracker.tick(); this.controls=settings(); this.season=Seasons.name(this.tracker.env.total_ticks); this.metric(0);
         this.event(upgrade?'upgrade':'start',null,upgrade?'Rates and active-brain recording begin here; earlier data unavailable.':'Species recording started');
     }
     metric(id) {
@@ -53,6 +54,11 @@ class LineageResearch {
         const next=settings(),changes=[];
         for (const key of Object.keys(next)) if (String(this.controls[key])!==String(next[key])) changes.push(`${key}: ${this.controls[key]} → ${next[key]}`);
         if (changes.length) {this.event('settings',null,changes.join('; '));this.controls=next;}
+    }
+    observeSeason(tick) {
+        if(!this.tracker.active||this.fromTick===null)return;
+        const next=Seasons.name(tick);
+        if(this.season!==next){this.event('season',null,`Season: ${this.season||'not recorded'} → ${next}`);this.season=next;}
     }
     count(nodeId,kind,cause) {
         const bucket=Math.max(0,Math.ceil((this.tracker.tick()-this.fromTick)/100)-1);
@@ -104,7 +110,7 @@ class LineageResearch {
         return S.exportOrganism(v.snapshot,this.tracker.byId.get(v.nodeId).species);
     }
     serialize() {
-        return S.copy({fromTick:this.fromTick,events:this.events,variants:this.variants,controls:this.controls,environment:this.environment.serialize(),
+        return S.copy({fromTick:this.fromTick,events:this.events,variants:this.variants,controls:this.controls,season:this.season,environment:this.environment.serialize(),
             metrics:this.metrics.map(({index,...m})=>m)});
     }
     load(raw,tags) {
@@ -120,7 +126,8 @@ class LineageResearch {
         const d=S.copy(raw),fail=()=>{throw new Error('Invalid research archive');},uint=n=>Number.isSafeInteger(n)&&n>=0;
         if(d.fromTick!==null&&!uint(d.fromTick)||!Array.isArray(d.events)||!Array.isArray(d.variants)||!Array.isArray(d.metrics)||!d.controls||typeof d.controls!=='object')fail();
         if(d.fromTick===null&&(d.events.length||d.variants.length||d.metrics.length))fail();
-        this.fromTick=d.fromTick;this.controls=d.controls;
+        if(d.season!=null&&!['Off','Summer','Winter'].includes(d.season))fail();
+        this.fromTick=d.fromTick;this.controls=d.controls;this.season=d.season==null?Seasons.name(t.env.total_ticks):d.season;
         for(const m of d.metrics){
             if(!uint(m.id)||m.id!==0&&!t.byId.has(m.id)||this.metricMap.has(m.id)||!uint(m.births)||!uint(m.deaths)||!m.causes||!Array.isArray(m.buckets))fail();
             if(CAUSES.some(c=>!uint(m.causes[c]))||Object.values(m.causes).some(c=>!uint(c))||Object.values(m.causes).reduce((sum,c)=>sum+c,0)>m.deaths)fail();

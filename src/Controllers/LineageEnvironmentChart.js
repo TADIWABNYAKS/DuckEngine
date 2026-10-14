@@ -23,7 +23,7 @@ class LineageEnvironmentChart {
         const ctx=this.canvas.getContext('2d');ctx.clearRect(0,0,820,160);
         if(!data.length) { this.summary.textContent='Environment'; this.caption.textContent='No environment history recorded.'; return; }
         const latest=data[data.length-1];
-        this.summary.textContent=`Environment · Food ${latest.food} · Plants ${latest.plants} · tick ${latest.tick}`;
+        this.summary.textContent=`Environment · Food ${latest.food} · Plants ${latest.plants} · Pollen ${latest.pollenFood||0} food / ${latest.pollenCarriers||0} carriers${latest.season ? ' · ' + latest.season : ''} · tick ${latest.tick}`;
         const first=range?range.first:data[0].tick, last=range?range.last:latest.tick;
         const selected=this.plants.value==='all'?null:Number(this.plants.value);
         for(const [key,label,color,top] of [['food','Food tiles','#905000',18],['plants','Plant organisms','#246c52',87]]) {
