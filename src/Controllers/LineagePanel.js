@@ -107,7 +107,10 @@ class LineagePanel {
         canvas.getContext('2d').drawImage(original, 0, 0); return canvas;
     }
     status(node) {
-        if (!node.population) return `Form extinct at tick ${node.extinctionTick} (${node.extinctionReason})`;
+        if (!node.population) {
+            const cause = node.extinctionReason === 'age-limit' ? 'age' : node.extinctionReason === 'lethal-damage' ? 'lethal damage' : null;
+            return `Form extinct at tick ${node.extinctionTick}${cause ? ' (' + cause + ')' : ''}`;
+        }
         return `${node.population} ${this.env.lineage.active ? 'living' : 'last observed living'} · Peak ${node.peak} · ${node.totalBirths} births`;
     }
     render(force = false) {

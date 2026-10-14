@@ -46,7 +46,7 @@ class LineageInsights {
         const p=this.panel;
         if(this.archive!==this.research()){this.archive=this.research();this.page=0;this.eventKey=null;this.formKey=null;this.formId=null;this.brainId=null;this.brainPage=0;}
         this.wholeRate.textContent=this.rateText(0,'Whole line');
-        const c=this.research().metricMap.get(0)?.causes||{};this.wholeCauses.textContent=`Whole-line recorded deaths: age ${c['age-limit']||0}, damage ${c['lethal-damage']||0}, manual ${c['manual-removal']||0}, unknown ${c.unknown||0}`;
+        const c=this.research().metricMap.get(0)?.causes||{};this.wholeCauses.textContent=`Whole-line recorded deaths: age ${c['age-limit']||0}, lethal damage ${c['lethal-damage']||0}`;
         this.selectedRate.textContent=p.selected?this.rateText(p.selected,'Form #'+p.selected):'Select a form for its rates. Starting members are not births.';
         this.renderEvents();
     }
@@ -71,7 +71,7 @@ class LineageInsights {
             this.formHost.append(el('h4','Active brain versions'));this.brainList=el('div');this.brainDetails=el('div');this.formHost.append(this.brainList,this.brainDetails);host.append(this.formHost);this.formKey=null;
         }
         const m=r.metricMap.get(node.id),c=m?m.causes:{};
-        this.causes.textContent=`${this.rateText(node.id,'This form')} · Recorded deaths: age ${c['age-limit']||0}, damage ${c['lethal-damage']||0}, manual ${c['manual-removal']||0}, unknown ${c.unknown||0}`;
+        this.causes.textContent=`${this.rateText(node.id,'This form')} · Recorded deaths: age ${c['age-limit']||0}, lethal damage ${c['lethal-damage']||0}`;
         const versions=r.formVariants.get(node.id)||[];
         if(this.formId!==node.id){this.formId=node.id;this.brainPage=0;if(!versions.some(v=>v.id===this.brainId))this.brainId=versions[0]?.id||null;}
         const key=`${node.id}:${versions.length}:${this.brainPage}:${this.brainId}`;
@@ -122,7 +122,7 @@ class LineageInsights {
             for(const [x,[low,high]] of bins){ctx.lineTo(x,95-high/max*75);ctx.lineTo(x,95-low/max*75);}ctx.stroke();
         }
         this.drawMarkers(ctx,first,last);ctx.fillStyle='#18202b';ctx.font='12px Arial';ctx.fillText(String(max),2,25);ctx.fillText('0',15,98);ctx.fillText(String(first),35,115);ctx.fillText(String(last),755,115);
-        p.historyCaption.textContent=`${selected?'Form #'+selected:'Whole line'} · births (green), deaths (red) per 100 ticks · completed 100-tick windows only. Deaths include manual removals; check the event log. Click a marker to locate its event.`;
+        p.historyCaption.textContent=`${selected?'Form #'+selected:'Whole line'} · births (green), deaths (red) per 100 ticks · completed 100-tick windows only. Click a marker to locate its event.`;
     }
 }
 module.exports=LineageInsights;

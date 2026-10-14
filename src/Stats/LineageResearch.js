@@ -3,7 +3,7 @@ const S = require('./LineageSnapshot');
 const Environment = require('./LineageEnvironment');
 const Hyper = require('../Hyperparameters');
 const Config = require('../WorldConfig');
-const CAUSES = ['age-limit','lethal-damage','manual-removal','unknown'];
+const CAUSES = ['age-limit','lethal-damage'];
 const EVENT_TYPES = ['start','body-mutation','brain-version','brain-change','form-extinction','form-revival','line-extinction','intervention','settings','stop','upgrade'];
 function activeBrain(org) { return org.anatomy.cells.some(c=>c.state.name==='mover') && org.anatomy.cells.some(c=>c.state.name==='eye'); }
 function brainKey(org) {
@@ -95,10 +95,9 @@ class LineageResearch {
         this.members.set(org,v);v.population++;if(founder)v.founders++;else v.births++;
     }
     death(org,node,reason) {
-        const cause=CAUSES.includes(reason)?reason:(reason==='manual intervention'||reason==='removed from world'?'manual-removal':'unknown');
+        const cause=CAUSES.includes(reason)?reason:null;
         this.count(node.id,'deaths',cause);
         const v=this.members.get(org);if(v){v.population--;v.deaths++;this.members.delete(org);}
-        if(cause==='manual-removal')this.event('intervention',node.id,'Manual removal of tracked organisms');
     }
     exportVariant(id) {
         const v=this.byVariant.get(id);if(!v)throw new Error('Unknown brain version');
@@ -124,7 +123,8 @@ class LineageResearch {
         this.fromTick=d.fromTick;this.controls=d.controls;
         for(const m of d.metrics){
             if(!uint(m.id)||m.id!==0&&!t.byId.has(m.id)||this.metricMap.has(m.id)||!uint(m.births)||!uint(m.deaths)||!m.causes||!Array.isArray(m.buckets))fail();
-            if(CAUSES.some(c=>!uint(m.causes[c]))||CAUSES.reduce((sum,c)=>sum+m.causes[c],0)!==m.deaths)fail();
+            if(CAUSES.some(c=>!uint(m.causes[c]))||Object.values(m.causes).some(c=>!uint(c))||Object.values(m.causes).reduce((sum,c)=>sum+c,0)>m.deaths)fail();
+            m.causes=Object.fromEntries(CAUSES.map(c=>[c,m.causes[c]]));
             m.index=new Map();let previous=-1,births=0,deaths=0;
             for(const b of m.buckets){if(!uint(b.index)||b.index<=previous||!uint(b.births)||!uint(b.deaths))fail();previous=b.index;m.index.set(b.index,b);births+=b.births;deaths+=b.deaths;}
             if(births!==m.births||deaths!==m.deaths)fail();

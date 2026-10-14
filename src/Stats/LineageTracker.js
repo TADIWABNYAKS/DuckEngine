@@ -70,13 +70,13 @@ class LineageTracker {
     death(org, reason = null) {
         if (!this.active) return;
         const node = this.nodeFor(org); if (!node) return;
-        const deathReason=reason || (this.env.lineage_event_tick==null?'manual intervention':'unknown');
+        const deathReason=['age-limit','lethal-damage'].includes(reason)?reason:null;
         this.research.death(org,node,deathReason);
         this.members.delete(org); node.population--; node.totalDeaths++; this.living--; this.revision++;
         if (!node.population) {
             node.extinctionTick = this.tick(); node.extinctionCount++;
             node.extinctionReason = deathReason;
-            this.research.event('form-extinction',node.id,'Body form population reached zero ('+deathReason+')');
+            this.research.event('form-extinction',node.id,'Body form population reached zero'+(deathReason?' ('+deathReason+')':''));
             this.liveForms.delete(node.id); this.point(node.history,this.tick(),0);
         }
         if (!this.living) { this.extinctionTick = this.tick(); this.research.event('line-extinction',null,'Entire tracked line reached zero'); this.sample(this.tick(),true); }
