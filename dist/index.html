@@ -34,6 +34,7 @@
 				<input id="slider" type="range" min="1" max="100" value="25">
 				<p id='fps'>Target FPS: 60</p>
 				<p id='fps-actual'></p>
+				<p id='season-display'>Season: Off</p>
 				<button id='reset-env' title='Restarts simulation with default organism.'>Reset</button>
 				<button id='clear-env' title="Removes all organisms.">Clear</button>
 				<div id="brush-size-container">
@@ -208,6 +209,30 @@
 						<br>
 						<label for="dont-kill-same-species" title='When on, killer cells will not harm organisms of the same species.'>Don't kill same species</label>
 						<input type="checkbox" id="dont-kill-same-species">
+						<h4>Seasons &amp; Food Decay</h4>
+						<label for="seasons-enabled" title='When on, the world alternates between summer and winter, starting in summer.'>Seasons enabled</label>
+						<input type="checkbox" id="seasons-enabled">
+						<br>
+						<label for="season-length" title='Number of ticks each season lasts (a full year is two seasons).'>Season length (ticks):</label>
+						<input type="number" id="season-length" min="1" value=3000 step="100">
+						<br>
+						<label for="summer-production" title='Producer food chance is multiplied by this in summer.'>Summer food production x</label>
+						<input type="number" id="summer-production" min="0" value=1.5 step="0.1">
+						<br>
+						<label for="winter-production" title='Producer food chance is multiplied by this in winter.'>Winter food production x</label>
+						<input type="number" id="winter-production" min="0" value=0.5 step="0.1">
+						<br>
+						<label for="food-decay-enabled" title='When on, uneaten food slowly rots back into empty space.'>Food decay enabled</label>
+						<input type="checkbox" id="food-decay-enabled">
+						<br>
+						<label for="food-decay-rate" title='Percent chance per tick that each food cell rots (before the season multiplier).'>Food decay rate (% per tick):</label>
+						<input type="number" id="food-decay-rate" min="0" max="100" value=0.1 step="0.01">
+						<br>
+						<label for="summer-decay" title='Food decay chance is multiplied by this in summer (only when seasons are on).'>Summer decay x</label>
+						<input type="number" id="summer-decay" min="0" value=2 step="0.1">
+						<br>
+						<label for="winter-decay" title='Food decay chance is multiplied by this in winter (only when seasons are on).'>Winter decay x</label>
+						<input type="number" id="winter-decay" min="0" value=0.5 step="0.1">
 
 						
 					</div>

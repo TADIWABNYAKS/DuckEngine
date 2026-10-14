@@ -33,6 +33,18 @@ const Hyperparams = {
         this.extraMoverFoodCost = 0;
 
         this.maxOrganisms = -1;
+
+        // Seasons - Implemented by Jack
+        this.seasonsEnabled = false;
+        this.seasonLength = 3000;              // ticks per season
+        this.summerProductionMultiplier = 1.5; // plant food production in summer
+        this.winterProductionMultiplier = 0.5; // plant food production in winter
+        this.summerDecayMultiplier = 2;        // food decay speed in summer
+        this.winterDecayMultiplier = 0.5;      // food decay speed in winter
+
+        // Food decay - Implemented by Jack
+        this.foodDecayEnabled = false;
+        this.foodDecayRate = 0.1;              // % chance per tick that a food cell rots
     },
 
     loadJsonObj(obj) {

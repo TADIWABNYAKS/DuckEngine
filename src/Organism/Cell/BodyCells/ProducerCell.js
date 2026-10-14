@@ -1,6 +1,7 @@
 const CellStates = require("../CellStates");
 const BodyCell = require("./BodyCell");
 const Hyperparams = require("../../../Hyperparameters");
+const Seasons = require("../../../Environments/Seasons");
 
 class ProducerCell extends BodyCell{
     constructor(org, loc_col, loc_row){
@@ -12,7 +13,8 @@ class ProducerCell extends BodyCell{
         if (this.org.anatomy.is_mover && !Hyperparams.moversCanProduce)
             return;
         var env = this.org.env;
-        var prob = Hyperparams.foodProdProb;
+        // Seasons (Implemented by Jack): scale food production by the season (x1 when seasons are off)
+        var prob = Hyperparams.foodProdProb * Seasons.productionMultiplier(env.total_ticks || 0);
         var real_c = this.getRealCol();
         var real_r = this.getRealRow();
         if (Math.random() * 100 <= prob) {
