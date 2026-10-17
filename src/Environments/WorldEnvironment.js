@@ -152,6 +152,7 @@ class WorldEnvironment extends Environment{
             }
         }
     }
+    addHabitat() {}
 
     reset(confirm_reset=true, reset_life=true) {
         if (confirm_reset && !confirm('The current environment will be lost. Proceed?'))
