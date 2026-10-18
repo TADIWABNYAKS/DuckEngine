@@ -27,6 +27,7 @@ class KillerCell extends BodyCell{
         if (Hyperparams.instaKill && is_hit) {
             this.org.harm();
         }
+        if (this.org.env.isHiddenFrom(n_cell.owner, this.org)) return;
     }
 }
 

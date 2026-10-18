@@ -12,6 +12,9 @@ class Environment{
         this.grid_map.setCellType(c, r, state);
         this.grid_map.setCellOwner(c, r, owner);
     }
+    isHabitat() { return false; }
+    isHabitatBlocked() { return false; }
+    isHiddenFrom() { return false; }
 }
 
 

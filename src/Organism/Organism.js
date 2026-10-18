@@ -272,6 +272,7 @@ class Organism {
             if (cell==null) {
                 return false;
             }
+            if (this.env.isHabitatBlocked(this, cell.col, cell.row)) return false;
             if (cell.owner==this || cell.state==CellStates.empty || (!Hyperparams.foodBlocksReproduction && cell.state==CellStates.food)){
                 continue;
             }
