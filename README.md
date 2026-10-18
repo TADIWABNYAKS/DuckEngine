@@ -77,3 +77,16 @@ Organims can also rotate around a central pivot cell. This cell can never be rem
 
 ## Eyes and Brains
 Any organism can evolve eyes, but when an organism has both eyes and mover cells it is given a brain. The eye, unlike other cells, has a direction, which is denoted by the direction of the slit in the cell. It "looks" forward in this direction and "sees" the first non-empty cell within a certain range. It checks the type of the cell and informs the brain, which then decideds how to move. The brain can either ignore (keep moving in whatever direction), chase (move towards the observed cell), or retreat (move in the opposite direction of the observed cell). The brain maps different observed cell types to different actions. For instance, the brain will chase when it sees food and retreat when it sees a killer cell. These behaviors can mutate over time. 
+
+
+# Habitats 
+HABITATS: sheltered ground where small organisms can hide.
+
+A habitat is its own layer, not a CellState. Every organism overwrites
+the state of the grid cells it stands on and resets them to "empty"
+when it moves away, which would erase a habitat stored as a state.
+
+Rules:
+    - an organism with more than habitat_max_cells cells can't enter
+    - a small organism with ALL of its cells on habitat tiles is "hidden"
+    - a hidden organism can't be harmed or seen by bigger organisms

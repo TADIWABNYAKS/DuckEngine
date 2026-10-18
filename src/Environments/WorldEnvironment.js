@@ -10,10 +10,16 @@ const WorldConfig = require('../WorldConfig');
 const SerializeHelper = require('../Utils/SerializeHelper');
 const Species = require('../Stats/Species');
 
+// Habitat tiles live in a set of numbers: col*HABITAT_STRIDE + row
+const HABITAT_STRIDE = 65536;
+const habitatKey = (col, row) => col * HABITAT_STRIDE + row;
+const habitatCol = (key) => Math.floor(key / HABITAT_STRIDE);
+const habitatRow = (key) => key % HABITAT_STRIDE;
+
 class WorldEnvironment extends Environment{
     constructor(engine, cell_size) {
         super();
-        this.engine = engine;
+        this.engine = engine ;
         this.renderer = new Renderer('env-canvas', 'env', cell_size);
         this.controller = new EnvironmentController(this, this.renderer.canvas);
         this.num_rows = Math.ceil(this.renderer.height / cell_size);
@@ -21,12 +27,16 @@ class WorldEnvironment extends Environment{
         this.grid_map = new GridMap(this.num_cols, this.num_rows, cell_size);
         this.organisms = [];
         this.walls = [];
+        this.habitats = new Set();
+        this.habitat_max_cells = 5; // Animals with MORE cells than this can't enter or hide in a habitat
         this.total_mutability = 0;
         this.largest_cell_count = 0;
         this.reset_count = 0;
         this.total_ticks = 0;
         this.data_update_rate = 100;
         FossilRecord.setEnv(this);
+        // the renderer asks us whether a tile is a habitat so it can tint it
+        this.renderer.habitat_lookup = (col, row) => this.isHabitat(col, row)
     }
 
     update() {
@@ -84,6 +94,7 @@ class WorldEnvironment extends Environment{
         org.anatomy.addDefaultCell(CellStates.producer, -1, -1);
         this.addOrganism(org);
         FossilRecord.addSpecies(org, null);
+        this.addHabitat(center[0] + 20, center[1], 12);
     }
 
     addOrganism(organism) {
@@ -152,7 +163,81 @@ class WorldEnvironment extends Environment{
             }
         }
     }
-    addHabitat() {}
+
+    isHabitat(col, row) {
+        return this.habitats.has(habitatKey(col, row));
+    }
+    // paint a size x size square of habitat centered on (col, row)
+    addHabitat(col, row, size=1) {
+        this.paintHabitat(col, row, size, true);
+    }
+    // erase a size x size square of habitat centered on (col, row)
+    removeHabitat(col, row, size=1) {
+        this.paintHabitat(col, row, size, false);
+    }
+
+    paintHabitat(col, row, size, on) {
+        size = Math.max(1, Math.floor(size));
+        let first_col = col - Math.floor(size / 2);
+        let first_row = row - Math.floor(size / 2);
+        for (let c = first_col; c < first_col + size; c++) {
+            for (let r = first_row; r < first_row + size; r++) {
+                let cell = this.grid_map.cellAt(c, r);
+                if (!cell) // off the grid
+                    continue;
+                let key = habitatKey(c, r);
+                if (this.habitats.has(key) === on)
+                    continue;
+                if (on)
+                    this.habitats.add(key);
+                else
+                    this.habitats.delete(key);
+                this.renderer.addToRender(cell); 
+            }
+        }
+    }
+
+    clearHabitats() {
+        for (let key of this.habitats) {
+            let cell = this.grid_map.cellAt(habitatCol(key), habitatRow(key));
+            if (cell)
+                this.renderer.addToRender(cell);
+        }
+        this.habitats.clear();
+    }
+
+    // forget habitat tiles that are no longer on the grid (after a resize)
+    pruneHabitats() {
+        for (let key of this.habitats) {
+            if (!this.grid_map.cellAt(habitatCol(key), habitatRow(key)))
+                this.habitats.delete(key);
+        }
+    }
+
+    isSmall(org) {
+        return org.anatomy.cells.length <= this.habitat_max_cells;
+    }
+
+    // true if organism is too big to step onto the habitat tile at (col, row)
+    isHabitatBlocked(org, col, row) {
+        return this.habitats.size > 0 && this.isHabitat(col, row) && !this.isSmall(org);
+    }
+
+    // a small organism with every cell on habitat is hidden
+    isHidden(org) {
+        if (!org || this.habitats.size === 0 || !this.isSmall(org))
+            return false;
+        for (let cell of org.anatomy.cells) {
+            if (!this.isHabitat(cell.getRealCol(), cell.getRealRow()))
+                return false;
+        }
+        return true;
+    }
+
+    // true if victim is hidden from observer.
+    isHiddenFrom(victim, observer) {
+        return this.isHidden(victim) && !this.isSmall(observer);
+    }
 
     reset(confirm_reset=true, reset_life=true) {
         if (confirm_reset && !confirm('The current environment will be lost. Proceed?'))
@@ -164,6 +249,8 @@ class WorldEnvironment extends Environment{
             restart = true;
         }
         this.organisms = [];
+        if (WorldConfig.clear_walls_on_reset) // habitats are terrain, so they follow the same rule as walls
+            this.habitats.clear();
         this.grid_map.fillGrid(CellStates.empty, !WorldConfig.clear_walls_on_reset);
         this.renderer.renderFullGrid(this.grid_map.grid);
         this.total_mutability = 0;
@@ -212,6 +299,12 @@ class WorldEnvironment extends Environment{
         this.grid_map.loadRaw(env.grid);
         for (let wall of env.grid.walls) {
             this.walls.push(this.grid_map.cellAt(wall.c, wall.r));
+        }
+
+        this.habitats.clear();
+        for (let h of env.habitats || []) {
+            if (this.grid_map.cellAt(h.c, h.r))
+                this.habitats.add(habitatKey(h.c, h.r));
         }
 
         // create species map
