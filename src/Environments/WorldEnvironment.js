@@ -94,7 +94,7 @@ class WorldEnvironment extends Environment{
         org.anatomy.addDefaultCell(CellStates.producer, -1, -1);
         this.addOrganism(org);
         FossilRecord.addSpecies(org, null);
-        this.addHabitat(center[0] + 20, center[1], 12);
+        // this.addHabitat(center[0] + 20, center[1], 12);
     }
 
     addOrganism(organism) {
@@ -268,6 +268,7 @@ class WorldEnvironment extends Environment{
         this.renderer.cell_size = cell_size;
         this.renderer.fillShape(rows*cell_size, cols*cell_size);
         this.grid_map.resize(cols, rows, cell_size);
+        this.pruneHabitats();
     }
 
     resizeFillWindow(cell_size) {
@@ -276,12 +277,16 @@ class WorldEnvironment extends Environment{
         this.num_cols = Math.ceil(this.renderer.width / cell_size);
         this.num_rows = Math.ceil(this.renderer.height / cell_size);
         this.grid_map.resize(this.num_cols, this.num_rows, cell_size);
+        this.pruneHabitats();
     }
 
     serialize() {
         this.clearDeadOrganisms();
         let env = SerializeHelper.copyNonObjects(this);
         env.grid = this.grid_map.serialize();
+        env.habitats = [];
+        for (let key of this.habitats)
+            env.habitats.push({c: habitatCol(key), r: habitatRow(key)});        
         env.organisms = [];
         for (let org of this.organisms){
             env.organisms.push(org.serialize());

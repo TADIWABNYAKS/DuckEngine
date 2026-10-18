@@ -50,8 +50,12 @@ class Renderer {
 
     renderCell(cell) {
         cell.state.render(this.ctx, cell, this.cell_size);
+        // green tint on habitat tiles 
+        if (this.habitat_lookup && this.habitat_lookup(cell.col, cell.row)) {
+            this.ctx.fillStyle = 'rgba(80, 200, 120, 0.3)';
+            this.ctx.fillRect(cell.x, cell.y, this.cell_size, this.cell_size);
+        }
     }
-
     renderOrganism(org) {
         for(var org_cell of org.anatomy.cells) {
             var cell = org.getRealCell(org_cell);
