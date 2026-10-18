@@ -140,3 +140,15 @@ below with the date, behaviour changed, and any compatibility implications.
   with mover cells. Stationary organisms still receive normal food nutrition.
 - Added compatibility handling to discard pollen stored on stationary organisms
   when loading saves created before this restriction.
+
+# Habitats 
+HABITATS: sheltered ground where small organisms can hide.
+
+A habitat is its own layer, not a CellState. Every organism overwrites
+the state of the grid cells it stands on and resets them to "empty"
+when it moves away, which would erase a habitat stored as a state.
+
+Rules:
+    - an organism with more than habitat_max_cells cells can't enter
+    - a small organism with ALL of its cells on habitat tiles is "hidden"
+    - a hidden organism can't be harmed or seen by bigger organisms

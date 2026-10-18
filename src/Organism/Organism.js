@@ -390,6 +390,10 @@ class Organism {
             if (cell==null) {
                 return false;
             }
+            // habitats keep out organisms that are too big
+            if (cell.owner != this && this.env.isHabitatBlocked(this, cell.col, cell.row)) {
+                return false;
+            }
             if (cell.owner==this || cell.state==CellStates.empty || (!Hyperparams.foodBlocksReproduction && cell.state==CellStates.food)){
                 continue;
             }
@@ -397,7 +401,7 @@ class Organism {
         }
         return true;
     }
-
+    
     harm() {
         this.damage++;
         if (this.damage >= this.maxHealth() || Hyperparams.instaKill) {
