@@ -12,6 +12,8 @@ class Cell{
 
     setType(state) {
         this.state = state;
+        // Cell replacement invalidates pollen, including replacement with ordinary food.
+        this.pollen = null;
     }
 }
 

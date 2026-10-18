@@ -12,6 +12,9 @@ class Organism {
         this.c = col;
         this.r = row;
         this.env = env;
+        // Persist identity across saves so plants cannot acquire their own pollen.
+        this.source_id = Array.from(globalThis.crypto.getRandomValues(new Uint32Array(4)), n => n.toString(16).padStart(8, '0')).join('');
+        this.pollen = null;
         this.lifetime = 0;
         this.food_collected = 0;
         this.living = true;
@@ -46,16 +49,16 @@ class Organism {
     }
 
     lifespan() {
-        return this.anatomy.cells.length * Hyperparams.lifespanMultiplier;
+        return Math.max(1, this.anatomy.cells.length * Hyperparams.lifespanMultiplier *
+            (this.isPlant() ? Hyperparams.plantLifespanFactor : 1));
     }
 
     maxHealth() {
         return this.anatomy.cells.length;
     }
 
-    reproduce() {
-        //produce mutated child
-        //check nearby locations (is there room and a direct path)
+    /** Create inherited, optionally mutated offspring without placing it in the world. */
+    createOffspring() {
         var org = new Organism(0, 0, this.env, this);
         if(Hyperparams.rotationEnabled){
             org.rotation = Directions.getRandomDirection();
@@ -75,10 +78,40 @@ class Organism {
             }
         } 
         var mutated = false;
+// TADIWA EDIT START: avoid comparing brains on unchanged biological inheritance
+        let lineageMutationAttempted = false;
+// TADIWA EDIT END: avoid comparing brains on unchanged biological inheritance
         if (this.calcRandomChance(prob)) {
+// TADIWA EDIT START: possible inherited brain change
+            lineageMutationAttempted = true;
+// TADIWA EDIT END: possible inherited brain change
             mutated = org.mutate();
         }
 
+// TADIWA EDIT START: carry mutation-attempt information to both birth paths
+        return {org, mutated, lineageMutationAttempted};
+// TADIWA EDIT END: carry mutation-attempt information to both birth paths
+    }
+
+    /** Register a placed offspring and update its species population or lineage. */
+// TADIWA EDIT START: shared biological registration for ordinary and pollen births
+    registerBirth(org, mutated, knownInherited=false, lineageOrigin=null) {
+// TADIWA EDIT END: shared biological registration for ordinary and pollen births
+        this.env.addOrganism(org);
+        if (mutated) FossilRecord.addSpecies(org, this.species);
+        else {
+            FossilRecord.resurrect(org.species);
+            org.species.addPop();
+        }
+// TADIWA EDIT START: observe only successfully placed offspring, with pollen donor provenance
+        if (this.env.lineage && this.env.lineage.active) this.env.lineage.birth(this, org, knownInherited, lineageOrigin);
+// TADIWA EDIT END: observe only successfully placed offspring, with pollen donor provenance
+    }
+
+    reproduce() {
+// TADIWA EDIT START: preserve ordinary inherited brain fast path
+        const {org, mutated, lineageMutationAttempted} = this.createOffspring();
+// TADIWA EDIT END: preserve ordinary inherited brain fast path
         var direction = Directions.getRandomScalar();
         var direction_c = direction[0];
         var direction_r = direction[1];
@@ -93,16 +126,101 @@ class Organism {
         {
             org.c = new_c;
             org.r = new_r;
-            this.env.addOrganism(org);
-            org.updateGrid();
-            if (mutated) {
-                FossilRecord.addSpecies(org, this.species);
-            }
-            else {
-                org.species.addPop();
-            }
+// TADIWA EDIT START: successful ordinary biological birth through shared registration
+            this.registerBirth(org, mutated, !lineageMutationAttempted);
+// TADIWA EDIT END: successful ordinary biological birth through shared registration
         }
         Math.max(this.food_collected -= this.foodNeeded(), 0);
+    }
+
+    /** Only stationary producers participate in pollen production and reduced lifespan. */
+    isPlant() {
+        return this.anatomy.is_producer && !this.anatomy.is_mover;
+    }
+
+    /** Snapshot inheritable traits and retain the source species after parent death. */
+    createPollen() {
+        FossilRecord.pollen_species[this.species.name] = this.species;
+// TADIWA EDIT START: attach donor lineage to delayed pollen without retaining the live donor
+        const payload = {
+            source_id: this.source_id,
+            anatomy: this.anatomy.serialize(), brain: JSON.parse(JSON.stringify(this.brain.serialize())),
+            move_range: this.move_range, mutability: this.mutability,
+            species_name: this.species.name
+        };
+        if (this.env.lineage && this.env.lineage.active) this.env.lineage.pollen.capture(this, payload);
+        return payload;
+// TADIWA EDIT END: attach donor lineage to delayed pollen without retaining the live donor
+    }
+
+    /** Only movers retain a foreign pollen load; additional food does not reset it. */
+    acquirePollen(payload) {
+        if (!this.anatomy.is_mover || !payload || this.pollen || payload.source_id === this.source_id) return;
+        this.pollen = {source: payload, remaining: Hyperparams.pollenDelayTicks};
+// TADIWA EDIT START: observe transfer of tracked pollen to a carrier
+        if (this.env.lineage && this.env.lineage.active) this.env.lineage.pollen.addCarrier(this);
+// TADIWA EDIT END: observe transfer of tracked pollen to a carrier
+    }
+
+    /** Compute local bounds after rotation without allocating coordinate arrays. */
+    bounds() {
+        let left = Infinity, right = -Infinity, top = Infinity, bottom = -Infinity;
+        for (const cell of this.anatomy.cells) {
+            const col = cell.rotatedCol(this.rotation);
+            const row = cell.rotatedRow(this.rotation);
+            left = Math.min(left, col);
+            right = Math.max(right, col);
+            top = Math.min(top, row);
+            bottom = Math.max(bottom, row);
+        }
+        return {left, right, top, bottom};
+    }
+
+    /** Advance an existing load and consume it before attempting reproduction. */
+    updatePollen() {
+        if (!this.anatomy.is_mover) {
+// TADIWA EDIT START: release pollen when a carrier cannot retain it
+            if (this.env.lineage && this.env.lineage.active) this.env.lineage.pollen.removeCarrier(this);
+// TADIWA EDIT END: release pollen when a carrier cannot retain it
+            this.pollen = null;
+            return;
+        }
+        if (!this.pollen || --this.pollen.remaining > 0) return;
+        const source = this.pollen.source;
+// TADIWA EDIT START: release the consumed carrier load before the unchanged reproduction attempt
+        if (this.env.lineage && this.env.lineage.active) this.env.lineage.pollen.removeCarrier(this);
+// TADIWA EDIT END: release the consumed carrier load before the unchanged reproduction attempt
+        this.pollen = null;
+        if (!this.calcRandomChance(Hyperparams.pollenReproductionProb) || !this.env.canAddOrganism()) return;
+        const species = FossilRecord.extant_species[source.species_name] || FossilRecord.pollen_species[source.species_name];
+        if (!species) return;
+        const parent = new Organism(0, 0, this.env);
+        parent.loadRaw(source);
+        parent.species = species;
+// TADIWA EDIT START: retain mutation-attempt information for pollen offspring
+        const {org, mutated, lineageMutationAttempted} = parent.createOffspring();
+// TADIWA EDIT END: retain mutation-attempt information for pollen offspring
+        const a = this.bounds(), b = org.bounds();
+        // A two-cell offset leaves a one-cell gap between the bounding boxes.
+        const positions = [
+            [this.c + a.right + 2 - b.left, this.r],
+            [this.c + a.left - 2 - b.right, this.r],
+            [this.c, this.r + a.bottom + 2 - b.top],
+            [this.c, this.r + a.top - 2 - b.bottom]
+        ];
+        for (let i = positions.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [positions[i], positions[j]] = [positions[j], positions[i]];
+        }
+        for (const [c, r] of positions) {
+            if (!org.isClear(c, r)) continue;
+            org.c = c;
+            org.r = r;
+// TADIWA EDIT START: attribute pollen offspring to the donor, never the carrier
+            parent.registerBirth(org, mutated, !lineageMutationAttempted, source.lineage_origin);
+// TADIWA EDIT END: attribute pollen offspring to the donor, never the carrier
+            return;
+        }
     }
 
     mutate() {
@@ -272,7 +390,10 @@ class Organism {
             if (cell==null) {
                 return false;
             }
-            if (this.env.isHabitatBlocked(this, cell.col, cell.row)) return false;
+            // habitats keep out organisms that are too big
+            if (cell.owner != this && this.env.isHabitatBlocked(this, cell.col, cell.row)) {
+                return false;
+            }
             if (cell.owner==this || cell.state==CellStates.empty || (!Hyperparams.foodBlocksReproduction && cell.state==CellStates.food)){
                 continue;
             }
@@ -280,15 +401,26 @@ class Organism {
         }
         return true;
     }
-
+    
     harm() {
         this.damage++;
         if (this.damage >= this.maxHealth() || Hyperparams.instaKill) {
-            this.die();
+// TADIWA EDIT START: record the actual lethal damage path
+            this.die('lethal-damage');
+// TADIWA EDIT END: record the actual lethal damage path
         }
     }
 
-    die() {
+// TADIWA EDIT START: explicit observed death cause
+    die(reason = null) {
+// TADIWA EDIT END: explicit observed death cause
+// TADIWA EDIT START: release carrier pollen on death
+        if (this.env.lineage && this.env.lineage.active) this.env.lineage.pollen.removeCarrier(this);
+// TADIWA EDIT END: release carrier pollen on death
+// TADIWA EDIT START: idempotent death observation
+        if (this.env.lineage && this.env.lineage.active) this.env.lineage.death(this, reason);
+// TADIWA EDIT END: idempotent death observation
+        this.pollen = null;
         for (var cell of this.anatomy.cells) {
             var real_c = this.c + cell.rotatedCol(this.rotation);
             var real_r = this.r + cell.rotatedRow(this.rotation);
@@ -307,9 +439,13 @@ class Organism {
     }
 
     update() {
+        // Newly acquired pollen starts aging on the following simulation tick.
+        const pollenAtStart = this.pollen;
         this.lifetime++;
         if (this.lifetime > this.lifespan()) {
-            this.die();
+// TADIWA EDIT START: record the actual age limit path
+            this.die('age-limit');
+// TADIWA EDIT END: record the actual age limit path
             return this.living;
         }
         if (this.food_collected >= this.foodNeeded()) {
@@ -379,6 +515,7 @@ class Organism {
                 }
             }
         }
+        if (pollenAtStart && this.pollen === pollenAtStart) this.updatePollen();
         return this.living;
     }
 
@@ -410,16 +547,29 @@ class Organism {
 
     serialize() {
         let org = SerializeHelper.copyNonObjects(this);
+        org.pollen = this.pollen ? JSON.parse(JSON.stringify(this.pollen)) : null;
         org.anatomy = this.anatomy.serialize();
         if (this.anatomy.is_mover && this.anatomy.has_eyes)
             org.brain = this.brain.serialize();
+// TADIWA EDIT START: separate standalone exports from world tags
         org.species_name = this.species.name;
+        // Generic organism exports never carry world identity.
+        delete org.lineage_id;
+        delete org.lineage_session;
+        delete org.lineage_brain;
+// TADIWA EDIT END: separate standalone exports from world tags
         return org;
     }
 
     loadRaw(org) {
-        SerializeHelper.overwriteNonObjects(org, this);
+// TADIWA EDIT START: restore pollen while excluding tracking metadata from organism inheritance
+        this.pollen = org.pollen ? JSON.parse(JSON.stringify(org.pollen)) : null;
+        const {lineage_id, lineage_session, lineage_brain, lineage_origin, ...form} = org;
+        SerializeHelper.overwriteNonObjects(form, this);
+// TADIWA EDIT END: restore pollen while excluding tracking metadata from organism inheritance
         this.anatomy.loadRaw(org.anatomy)
+        // Discard stationary carriers from saves created before the mover-only rule.
+        if (!this.anatomy.is_mover) this.pollen = null;
         if (org.brain)
             this.brain.copy(org.brain)
     }

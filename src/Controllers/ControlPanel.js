@@ -1,3 +1,4 @@
+const Seasons = require('../Environments/Seasons');
 const Hyperparams = require("../Hyperparameters");
 const Modes = require("./ControlModes");
 const StatsPanel = require("../Stats/StatsPanel");
@@ -29,6 +30,10 @@ class ControlPanel {
         this.paused=false;
         this.setHyperparamDefaults();
         LoadController.control_panel = this;
+// TADIWA EDIT START: timeline of user changes to experiment settings
+        $(document).on('change.lineage', '.tab input, .tab select', () => this.engine.env.lineage.research.observeSettings());
+        $('#reset-rules').on('click.lineage', () => this.engine.env.lineage.research.observeSettings());
+// TADIWA EDIT END: timeline of user changes to experiment settings
     }
 
     defineMinMaxControls(){
@@ -290,7 +295,10 @@ class ControlPanel {
             let was_running = this.engine.running;
             this.setPaused(true);
             let env = this.engine.env.serialize();
-            let data = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(env));
+            // TADIWA EDIT START: Blob download for worlds containing large lineage archives
+            let data = URL.createObjectURL(new Blob([JSON.stringify(env)], {type: 'application/json'}));
+            setTimeout(() => URL.revokeObjectURL(data), 1000);
+            // TADIWA EDIT END: Blob download for worlds containing large lineage archives
             let downloadEl = document.getElementById('download-el');
             downloadEl.setAttribute("href", data);
             downloadEl.setAttribute("download", $('#save-env-name').val()+".json");
@@ -339,6 +347,12 @@ class ControlPanel {
     }
 
     defineHyperparameterControls() {
+        for (const key of ['pollenFoodProb', 'pollenDelayTicks', 'pollenReproductionProb', 'plantLifespanFactor']) {
+            $('#' + key).on('change blur', () => {
+                Hyperparams.setPollenControl(key, $('#' + key).val());
+                $('#' + key).val(Hyperparams[key]);
+            });
+        }
         $('#food-prod-prob').change(function() {
             Hyperparams.foodProdProb = $('#food-prod-prob').val();
         }.bind(this));
@@ -369,6 +383,32 @@ class ControlPanel {
         });
         $('#org-limit').change(function() {
             Hyperparams.maxOrganisms = parseInt($('#org-limit').val());
+        });
+
+        // Seasons and food decay controls - Implemented by Jack
+        $('#seasons-enabled').change(function() {
+            Hyperparams.seasonsEnabled = this.checked;
+        });
+        $('#season-length').change(function() {
+            Hyperparams.seasonLength = Math.max(1, parseInt($('#season-length').val()) || 1);
+        });
+        $('#summer-production').change(function() {
+            Hyperparams.summerProductionMultiplier = parseFloat($('#summer-production').val());
+        });
+        $('#winter-production').change(function() {
+            Hyperparams.winterProductionMultiplier = parseFloat($('#winter-production').val());
+        });
+        $('#summer-decay').change(function() {
+            Hyperparams.summerDecayMultiplier = parseFloat($('#summer-decay').val());
+        });
+        $('#winter-decay').change(function() {
+            Hyperparams.winterDecayMultiplier = parseFloat($('#winter-decay').val());
+        });
+        $('#food-decay-enabled').change(function() {
+            Hyperparams.foodDecayEnabled = this.checked;
+        });
+        $('#food-decay-rate').change(function() {
+            Hyperparams.foodDecayRate = parseFloat($('#food-decay-rate').val());
         });
 
         $('#evolved-mutation').change( function() {
@@ -439,6 +479,9 @@ class ControlPanel {
             reader.onload = (e) => {
                 let result=JSON.parse(e.target.result);
                 Hyperparams.loadJsonObj(result);
+// TADIWA EDIT START: loaded experiment settings event
+                this.engine.env.lineage.research.observeSettings();
+// TADIWA EDIT END: loaded experiment settings event
                 this.updateHyperparamUIValues();
                 // have to clear the value so change() will be triggered if the same file is uploaded again
                 $('#upload-hyperparams')[0].value = '';
@@ -453,6 +496,7 @@ class ControlPanel {
     }
 
     updateHyperparamUIValues(){
+        for (const key of ['pollenFoodProb', 'pollenDelayTicks', 'pollenReproductionProb', 'plantLifespanFactor']) $('#' + key).val(Hyperparams[key]);
         $('#food-prod-prob').val(Hyperparams.foodProdProb);
         $('#lifespan-multiplier').val(Hyperparams.lifespanMultiplier);
         $('#rot-enabled').prop('checked', Hyperparams.rotationEnabled);
@@ -473,6 +517,14 @@ class ControlPanel {
         $('#see-through-self').prop('checked', Hyperparams.seeThroughSelf);
         $('#global-mutation').val(Hyperparams.globalMutability);
         $('#independent-eye-decisions').prop('checked', Hyperparams.evolveIndependentEyeDecisions);
+        $('#seasons-enabled').prop('checked', Hyperparams.seasonsEnabled);
+        $('#season-length').val(Hyperparams.seasonLength);
+        $('#summer-production').val(Hyperparams.summerProductionMultiplier);
+        $('#winter-production').val(Hyperparams.winterProductionMultiplier);
+        $('#summer-decay').val(Hyperparams.summerDecayMultiplier);
+        $('#winter-decay').val(Hyperparams.winterDecayMultiplier);
+        $('#food-decay-enabled').prop('checked', Hyperparams.foodDecayEnabled);
+        $('#food-decay-rate').val(Hyperparams.foodDecayRate);
         
         if (!Hyperparams.useGlobalMutability) {
             $('.global-mutation-container').css('display', 'none');
@@ -494,8 +546,7 @@ class ControlPanel {
                 .addClass('habitat-drop');
             habitat_btn.find('i').attr('class', 'fa fa-leaf');
             $('#wall-drop').after(habitat_btn);
-        }
-
+        }        
         $('.edit-mode-btn').click( function() {
             $('#cell-selections').css('display', 'none');
             $('#organism-options').css('display', 'none');
@@ -652,6 +703,9 @@ class ControlPanel {
     }
 
     setEditorOrganism(org) {
+// TADIWA EDIT START: keep original live selection
+        this.engine.env.lineage_selection = org;
+// TADIWA EDIT END: keep original live selection
         this.engine.organism_editor.setOrganismToCopyOf(org);
         this.editor_controller.clearDetailsPanel();
         this.editor_controller.setEditorPanel();
@@ -683,6 +737,10 @@ class ControlPanel {
         $('#fps-actual').text("Actual FPS: " + Math.floor(this.engine.actual_fps));
         $('#fps-hot').text(Math.floor(this.engine.actual_fps)+' FPS');
         $('#reset-count').text("Auto reset count: " + this.engine.env.reset_count);
+        let tick = this.engine.env.total_ticks;
+        $('#season-display').text(Hyperparams.seasonsEnabled
+            ? "Season: " + Seasons.name(tick) + " (" + Seasons.ticksLeft(tick) + " ticks left)"
+            : "Season: Off");
         this.stats_panel.updateDetails();
         if (WorldConfig.headless)
             this.updateHeadlessIcon(delta_time);

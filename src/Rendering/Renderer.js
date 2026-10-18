@@ -50,12 +50,14 @@ class Renderer {
 
     renderCell(cell) {
         cell.state.render(this.ctx, cell, this.cell_size);
+        // TADIWA EDIT START: retain main habitat tint with merged renderer
+        // green tint on habitat tiles 
         if (this.habitat_lookup && this.habitat_lookup(cell.col, cell.row)) {
-        this.ctx.fillStyle = 'rgba(80, 200, 120, 0.25)';
-        this.ctx.fillRect(cell.x, cell.y, this.cell_size, this.cell_size);
-}
+            this.ctx.fillStyle = 'rgba(80, 200, 120, 0.25)';
+            this.ctx.fillRect(cell.x, cell.y, this.cell_size, this.cell_size);
+        }
     }
-
+    // TADIWA EDIT END: retain main habitat tint with merged renderer
     renderOrganism(org) {
         for(var org_cell of org.anatomy.cells) {
             var cell = org.getRealCell(org_cell);

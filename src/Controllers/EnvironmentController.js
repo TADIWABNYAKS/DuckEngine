@@ -127,11 +127,10 @@ class EnvironmentController extends CanvasController{
                             this.dropCellType(cell.col, cell.row, CellStates.empty, false, CellStates.food);
                         }
                         break;
-
                 case Modes.HabitatDrop:
                     // left click paints habitat, right click erases it
                     this.dropHabitat(cell.col, cell.row, left_click);
-                    break; 
+                    break;
 
                 case Modes.ClickKill:
                     this.killNearOrganisms();

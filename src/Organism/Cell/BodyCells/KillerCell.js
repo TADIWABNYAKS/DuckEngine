@@ -22,12 +22,14 @@ class KillerCell extends BodyCell{
             return;
         if (Hyperparams.dontKillSameSpecies && n_cell.owner.species.name === this.org.species.name)
             return;
+        // a small organism hiding in a habitat can't be reached by a bigger predator
+        if (this.org.env.isHiddenFrom(n_cell.owner, this.org))
+            return;
         var is_hit = n_cell.state == CellStates.killer; // has to be calculated before death
         n_cell.owner.harm();
         if (Hyperparams.instaKill && is_hit) {
             this.org.harm();
         }
-        if (this.org.env.isHiddenFrom(n_cell.owner, this.org)) return;
     }
 }
 

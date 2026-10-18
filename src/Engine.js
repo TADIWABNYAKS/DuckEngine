@@ -3,6 +3,10 @@ const ControlPanel = require('./Controllers/ControlPanel');
 const OrganismEditor = require('./Environments/OrganismEditor');
 const {ColorScheme} = require('./Rendering/ColorScheme');
 
+// TADIWA EDIT START: lineage interface dependency
+const LineagePanel = require('./Controllers/LineagePanel');
+// TADIWA EDIT END: lineage interface dependency
+
 const MIN_TIMER_MS = 1;
 let SAFE_STEPS_PER_TICK = 5;// soft upper limit, can be bypassed when we have extra time
 const MAX_STEPS_PER_TICK = 100; // hard upper limit to prevent stalling the UI
@@ -17,6 +21,9 @@ class Engine {
         ColorScheme.setEnvironment(this.env, this.organism_editor);
         ColorScheme.loadColorScheme();
         this.env.OriginOfLife();
+// TADIWA EDIT START: lineage interface ownership
+        this.lineage_panel = new LineagePanel(this);
+// TADIWA EDIT END: lineage interface ownership
         
         this.sim_last_update = Date.now();
         this.sim_delta_time = 0;

@@ -2,6 +2,7 @@ const CellStates = require("../Organism/Cell/CellStates");
 
 const color_schemes = {
     "neon":{
+        "pollen-food":"#FFD166",
         "empty":"#0E1318",
         "food":"#2F7AB7",
         "wall":"white",
@@ -14,6 +15,7 @@ const color_schemes = {
         "eye-slit": "#0E1318"
     },
     "classic":{
+        "pollen-food":"#FF66CC",
         "empty":"#121D29",
         "food":"green",
         "wall":"gray",
@@ -26,6 +28,7 @@ const color_schemes = {
         "eye-slit": "#121D29"
     },
     "soft":{
+        "pollen-food":"#D4B76E",
         "empty":"#0B0E11",
         "food":"#4F86B2",
         "wall":"#5F6F78",
@@ -38,6 +41,7 @@ const color_schemes = {
         "eye-slit": "#0B0E11"
     },
     "dark":{
+        "pollen-food":"#D6AE50",
         "empty":"black",
         "food":"#225986",
         "wall":"#56616E",
@@ -50,6 +54,7 @@ const color_schemes = {
         "eye-slit": "black"
     },
     "grayscale":{
+        "pollen-food":"#BBBBBB",
         "empty":"black",
         "food":"#777777",
         "wall":"#EEEEEE",
@@ -79,6 +84,7 @@ class ColorSchemeSingleton {
         for (var state of CellStates.all) {
             state.color = color_scheme[state.name];
         }
+        CellStates.food.pollenColor = color_scheme['pollen-food'];
         CellStates.eye.slit_color=color_scheme['eye-slit']
         for (var cell_type in color_scheme) {
             $('#'+cell_type+'.cell-type ').css('background-color', color_scheme[cell_type]);

@@ -21,6 +21,7 @@ class MouthCell extends BodyCell{
         if (n_cell == null)
             return;
         if (n_cell.state == CellStates.food){
+            this.org.acquirePollen(n_cell.pollen);
             env.changeCell(n_cell.col, n_cell.row, CellStates.empty, null);
             this.org.food_collected++;
         }
