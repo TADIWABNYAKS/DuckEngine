@@ -65,6 +65,9 @@ class ControlPanel {
                 case 'd':
                     $('#wall-drop').click();
                     break;
+                case 'e':
+                    $('#habitat-drop').click();
+                    break;                    
                 case 'f':
                     $('#food-drop').click();
                     break;
@@ -483,6 +486,15 @@ class ControlPanel {
 
     defineModeControls() {
         var self = this;
+        // Habitat mode button.
+        if (!$('#habitat-drop').length) {
+            const habitat_btn = $('#wall-drop').clone()
+                .attr({id: 'habitat-drop', title: 'Habitat (E)'})
+                .removeClass('wall-drop selected')
+                .addClass('habitat-drop');
+            habitat_btn.find('i').attr('class', 'fa fa-leaf');
+            $('#wall-drop').after(habitat_btn);
+        }        
         $('.edit-mode-btn').click( function() {
             $('#cell-selections').css('display', 'none');
             $('#organism-options').css('display', 'none');
@@ -494,6 +506,9 @@ class ControlPanel {
                 case "wall-drop":
                     self.setMode(Modes.WallDrop);
                     break;
+                case "habitat-drop":
+                    self.setMode(Modes.HabitatDrop);
+                    break;                    
                 case "click-kill":
                     self.setMode(Modes.ClickKill);
                     break;

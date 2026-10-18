@@ -6,6 +6,7 @@ const Modes = {
     Select: 4,
     Clone: 5,
     Drag: 6,
+    HabitatDrop: 7,
 }
 
 module.exports = Modes;
