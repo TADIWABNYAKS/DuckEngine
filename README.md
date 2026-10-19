@@ -112,6 +112,79 @@ have no stored pollen and use the new defaults when their controls are applied.
 Set pollen probability to 0 and plant lifespan factor to 1 for baseline mechanics;
 existing loads will still finish their attempts.
 
+## Species lineage tracking (Tadiwanashe)
+
+The tracker follows a species and its descendants as mutations change their names.
+Select a living organism in the Editor, click **Track species**, then open
+**Lineage**. Recording starts with all living members of that species. It tracks
+one lineage at a time and cannot recover earlier ancestry.
+
+### Mutation tree and ancestor forms
+
+- Body-cell and inherited eye-direction changes create branches. Unchanged
+  offspring add to the existing form's population.
+- Forms show previews, first-observed ticks, mutation depth, population statistics
+  and parent comparisons. Search by form ID or species name, or collapse branches.
+- Brain versions are recorded separately for organisms with movers and eyes.
+  Each body form keeps its first observed member's brain, movement range and mutability.
+- Extinct forms remain available to download as organism JSON or open in the editor.
+
+### Population and environmental evidence
+
+Graphs show lineage and form populations, peaks, birth/death rates and extinction
+events. Recorded death causes are age limit and lethal damage. The timeline marks
+body and brain changes, seasons, settings and interventions. Losing one form does
+not mean the whole lineage is extinct.
+
+Food and plant populations are sampled every 100 ticks. Plants here are organisms
+with producers and no movers. These records support extinction investigations;
+evolutionary suicide still needs evidence from experimental comparisons.
+
+### Persistence and integration
+
+- World saves preserve the archive and restore tracking. Archives can also be
+  downloaded separately, and older worlds without tracking data still load.
+- Only successful biological births extend the lineage; failed reproduction and
+  manually placed clones are excluded.
+- Pollen births belong to the source plant's lineage. Tracking includes pending
+  pollen because descendants can appear after the plant dies.
+- Tracking does not change ecological rules or consume simulation randomness.
+
+### Files and implementation structure
+
+Data lives in `src/Stats`, controls in `src/Controllers` and previews in
+`src/Rendering`. Paths below are relative to the repository root.
+
+#### Added tracker modules
+
+| File | Responsibility |
+| --- | --- |
+| `src/Stats/LineageTracker.js` | Owns the tracking session, live membership, parent-linked body forms, birth/death accounting, population history and archive save/load. |
+| `src/Stats/LineageSnapshot.js` | Captures inherited organism data, identifies body forms, compares body/brain changes and produces editor-compatible organism exports. |
+| `src/Stats/LineageResearch.js` | Records birth/death rates, direct death causes, active brain versions, settings changes and season events. |
+| `src/Stats/LineageEnvironment.js` | Samples world food and stationary producer populations, including populations by current species name. |
+| `src/Stats/LineagePollen.js` | Preserves donor ancestry through pollen food and carriers; accounts for pending sources and delayed births. |
+| `src/Stats/LineageMigration.js` | Converts older individual-based archives into stopped form-based records for inspection. |
+| `src/Controllers/LineagePanel.js` | Builds the mutation tree, form search/navigation, population graph, comparisons, archive downloads and editor actions. |
+| `src/Controllers/LineageInsights.js` | Displays rates, death causes, event navigation and active brain versions. |
+| `src/Controllers/LineageEnvironmentChart.js` | Displays food and plant histories alongside the lineage time axis. |
+| `src/Rendering/LineageThumbnail.js` | Draws archived bodies and eye directions without creating live organisms or consuming simulation randomness. |
+
+#### Existing files changed for tracking and compatibility
+
+| File | Changes/additions |
+| --- | --- |
+| `src/Engine.js` | Creates and updates the lineage interface. |
+| `src/Environments/WorldEnvironment.js` | Owns the tracker; samples completed ticks; handles removal/reset boundaries; saves/restores archives and live identities; accounts for pollen removed from the world. |
+| `src/Organism/Organism.js` | Reports successful births and actual deaths; connects pollen births to their donor lineage; prevents tracking identity from leaking into standalone organism imports/exports. |
+| `src/Controllers/ControlPanel.js` | Retains the selected live organism for tracking, observes control changes and supports world downloads containing large archives. |
+| `src/Organism/Cell/BodyCells/ProducerCell.js` | Registers successfully created pollen packets with the tracker. |
+| `src/Grid/GridMap.js` | Copies pollen data on load so a running world does not mutate the saved input object. |
+| `src/Hyperparameters.js` | Restores season defaults for older saves without replacing explicitly supplied settings. |
+| `dist/css/style.css` | Styles the lineage panel, tree, graphs and comparisons; keeps editor toolbar buttons at their original size. |
+| `dist/index.html` | Updates asset references so the browser loads the integrated interface assets. |
+
+
 ## Change log
 
 This log records changes made to this codebase. Add future entries

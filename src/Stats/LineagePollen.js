@@ -31,22 +31,50 @@ class LineagePollen {
     removeCarrier(org) {
         if(this.carrierMembers.has(org)){this.carrierMembers.delete(org);this.carriers--;this.tracker.revision++;}
     }
-    rebuild(linkExisting=false) {
-        const t=this.tracker,bySource=new Map(),bySpecies=new Map();
-        this.food=0;this.carriers=0;this.foodMembers=new WeakMap();this.carrierMembers=new WeakMap();
-        for(const org of t.env.organisms){const node=t.nodeFor(org);if(node){bySource.set(org.source_id,node);bySpecies.set(org.species.name,node);}}
-        for(const node of t.nodes)if(!bySpecies.has(node.species))bySpecies.set(node.species,node);
-        const link=payload=>{
-            if(!payload)return;
-            if(linkExisting){
-                const node=bySource.get(payload.source_id)||bySpecies.get(payload.species_name);
-                if(node&&S.bodyKey(payload)===node.shapeKey)payload.lineage_origin={session:t.session,nodeId:node.id};
-                else if(payload.lineage_origin)delete payload.lineage_origin;
-            }else if(payload.lineage_origin?.session===t.session&&!this.nodeFor(payload.lineage_origin,payload))throw new Error('Invalid pollen lineage origin');
+    rebuild(linkExisting = false) {
+        const tracker = this.tracker;
+        const bySource = new Map(), bySpecies = new Map();
+        this.food = 0;
+        this.carriers = 0;
+        this.foodMembers = new WeakMap();
+        this.carrierMembers = new WeakMap();
+        for (const org of tracker.env.organisms) {
+            const node = tracker.nodeFor(org);
+            if (node) {
+                bySource.set(org.source_id, node);
+                bySpecies.set(org.species.name, node);
+            }
+        }
+        for (const node of tracker.nodes) {
+            if (!bySpecies.has(node.species)) bySpecies.set(node.species, node);
+        }
+        const link = payload => {
+            if (!payload) return;
+            if (linkExisting) {
+                // Starting a recording also includes pollen already produced by this species.
+                const node = bySource.get(payload.source_id) || bySpecies.get(payload.species_name);
+                if (node && S.bodyKey(payload) === node.shapeKey) {
+                    payload.lineage_origin = {session: tracker.session, nodeId: node.id};
+                } else if (payload.lineage_origin) {
+                    delete payload.lineage_origin;
+                }
+            } else if (payload.lineage_origin?.session === tracker.session && !this.nodeFor(payload.lineage_origin, payload)) {
+                throw new Error('Invalid pollen lineage origin');
+            }
         };
-        for(const col of t.env.grid_map.grid)for(const cell of col){link(cell.pollen);this.addFood(cell);}
-        for(const org of t.env.organisms)if(org.living&&org.anatomy.is_mover&&org.pollen){link(org.pollen.source);this.addCarrier(org);}
-        this.dormant=!t.living&&this.pending>0;
+        for (const column of tracker.env.grid_map.grid) {
+            for (const cell of column) {
+                link(cell.pollen);
+                this.addFood(cell);
+            }
+        }
+        for (const org of tracker.env.organisms) {
+            if (org.living && org.anatomy.is_mover && org.pollen) {
+                link(org.pollen.source);
+                this.addCarrier(org);
+            }
+        }
+        this.dormant = !tracker.living && this.pending > 0;
     }
     load(raw) {
         const t=this.tracker;

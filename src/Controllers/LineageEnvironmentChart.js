@@ -2,15 +2,23 @@
 function el(tag,text,cls) { const n=document.createElement(tag); if(text!==undefined)n.textContent=text; if(cls)n.className=cls; return n; }
 class LineageEnvironmentChart {
     constructor(panel) {
-        this.panel=panel; this.element=el('details',undefined,'lineage-environment'); this.element.open=true;
-        this.summary=el('summary','Environment');
-        const controls=el('div',undefined,'lineage-actions'); const label=el('label','Plants ');
-        this.plants=el('select'); this.plants.setAttribute('aria-label','Plant population');
-        this.plants.onchange=()=>panel.render(true); label.append(this.plants); controls.append(label);
-        this.canvas=el('canvas'); this.canvas.width=820; this.canvas.height=160;
-        this.canvas.setAttribute('aria-label','World food and plant population history');
-        this.caption=el('p','', 'lineage-history-caption');
-        this.element.append(this.summary,controls,this.canvas,this.caption);
+        this.panel = panel;
+        this.element = el('details', undefined, 'lineage-environment');
+        this.element.open = true;
+        this.summary = el('summary', 'Environment');
+        const controls = el('div', undefined, 'lineage-actions');
+        const label = el('label', 'Plants ');
+        this.plants = el('select');
+        this.plants.setAttribute('aria-label', 'Plant population');
+        this.plants.onchange = () => panel.render(true);
+        label.append(this.plants);
+        controls.append(label);
+        this.canvas = el('canvas');
+        this.canvas.width = 820;
+        this.canvas.height = 160;
+        this.canvas.setAttribute('aria-label', 'World food and plant population history');
+        this.caption = el('p', '', 'lineage-history-caption');
+        this.element.append(this.summary, controls, this.canvas, this.caption);
     }
     draw(range) {
         const t=this.panel.env.lineage, env=t.research.environment, data=env.history;

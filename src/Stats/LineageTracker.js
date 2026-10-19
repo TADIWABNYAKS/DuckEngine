@@ -4,6 +4,180 @@ const migrate = require('./LineageMigration');
 const Research = require('./LineageResearch');
 const Pollen = require('./LineagePollen');
 const fields = ['session','scope','nodes','genomes','history','interventions','nextId','rootId','active','complete','initialPopulation','totalBirths','living','peak','peakTick','extinctionTick','endedAtTick','endReason','error','migrationMessage'];
+function rejectArchive() {
+    throw new Error('Invalid species lineage archive');
+}
+
+function isCount(value) {
+    return Number.isSafeInteger(value) && value >= 0;
+}
+
+function validateHeader(data) {
+    if (
+        ![2, 3, 4].includes(data.version) ||
+        !['species', 'legacy-subset'].includes(data.scope) ||
+        !Array.isArray(data.nodes) ||
+        !Array.isArray(data.genomes) ||
+        !Array.isArray(data.interventions)
+    ) {
+        rejectArchive();
+    }
+    for (const field of ['session', 'nextId', 'initialPopulation', 'totalBirths', 'living', 'peak']) {
+        if (!isCount(data[field])) {
+            rejectArchive();
+        }
+    }
+    if (
+        !data.session ||
+        !data.nextId ||
+        data.peak < data.living ||
+        data.peak > data.initialPopulation + data.totalBirths ||
+        typeof data.active !== 'boolean' ||
+        typeof data.complete !== 'boolean'
+    ) {
+        rejectArchive();
+    }
+    for (const field of ['peakTick', 'extinctionTick', 'endedAtTick']) {
+        if (data[field] !== null && !isCount(data[field])) {
+            rejectArchive();
+        }
+    }
+    if (data.active && data.endedAtTick !== null) {
+        rejectArchive();
+    }
+    for (const intervention of data.interventions) {
+        if (!isCount(intervention.tick) || typeof intervention.reason !== 'string') {
+            rejectArchive();
+        }
+    }
+    data.genomes.forEach(Snapshot.validate);
+    validateHistory(data.history);
+}
+
+function validateForm(node, data, ids, branches) {
+    for (const field of ['id', 'mutationDepth', 'firstSeenTick', 'genomeId', 'population', 'founders', 'totalBirths', 'totalDeaths', 'peak', 'peakTick', 'extinctionCount']) {
+        if (!isCount(node[field])) {
+            rejectArchive();
+        }
+    }
+    if (
+        !node.id ||
+        ids.has(node.id) ||
+        !data.genomes[node.genomeId] ||
+        node.shapeKey !== Snapshot.bodyKey(data.genomes[node.genomeId]) ||
+        node.peak < node.population ||
+        node.peak > node.founders + node.totalBirths ||
+        node.founders + node.totalBirths - node.totalDeaths !== node.population
+    ) {
+        rejectArchive();
+    }
+    if (node.extinctionTick !== null && (!isCount(node.extinctionTick) || node.extinctionTick < node.firstSeenTick || node.population !== 0)) {
+        rejectArchive();
+    }
+    if (node.parentId === null) {
+        if (node.id !== data.rootId || node.mutationDepth !== 0 || ids.size) {
+            rejectArchive();
+        }
+    } else {
+        const parent = ids.get(node.parentId), key = node.parentId + ':' + node.shapeKey;
+        if (
+            !parent ||
+            node.mutationDepth !== parent.mutationDepth + 1 ||
+            node.firstSeenTick < parent.firstSeenTick ||
+            parent.shapeKey === node.shapeKey ||
+            branches.has(key) ||
+            node.founders
+        ) {
+            rejectArchive();
+        }
+        branches.set(key, node);
+    }
+    if ((node.population === 0) !== (node.extinctionTick !== null)) {
+        rejectArchive();
+    }
+}
+
+function readForms(data) {
+    const ids = new Map(), branches = new Map();
+    let living = 0, births = 0, founders = 0;
+    for (const node of data.nodes) {
+        validateForm(node, data, ids, branches);
+        validateHistory(node.history);
+        ids.set(node.id, node);
+        living += node.population;
+        births += node.totalBirths;
+        founders += node.founders;
+    }
+    if (
+        living !== data.living ||
+        births !== data.totalBirths ||
+        founders !== data.initialPopulation ||
+        data.nextId <= data.nodes.reduce((max, node) => Math.max(max, node.id), 0)
+    ) {
+        rejectArchive();
+    }
+    if (data.nodes.length ? !ids.has(data.rootId) : data.rootId !== null || data.active || data.genomes.length || data.history.length) {
+        rejectArchive();
+    }
+    const pollen = data.pollen || {
+        food: 0,
+        carriers: 0
+    };
+    if (!isCount(pollen.food) || !isCount(pollen.carriers) || data.version === 4 && !data.pollen) {
+        rejectArchive();
+    }
+    const pending = pollen.food + pollen.carriers;
+    if (data.extinctionTick !== null && (living !== 0 || pending || !data.nodes.length)) {
+        rejectArchive();
+    }
+    if (data.nodes.length && (!living && !pending && data.extinctionTick === null || data.peakTick === null || !data.active && data.endedAtTick === null)) {
+        rejectArchive();
+    }
+    return {
+        ids,
+        branches
+    };
+}
+
+function readMembers(data, ids, organisms, tags) {
+    const members = new WeakMap(), counts = new Map();
+    if (data.active) {
+        for (const org of organisms) {
+            const tag = tags.get(org);
+            if (!tag || tag.id == null) {
+                continue;
+            }
+            const node = ids.get(tag.id);
+            if (tag.session !== data.session || !node || !org.living || Snapshot.bodyKey(org) !== node.shapeKey) {
+                rejectArchive();
+            }
+            members.set(org, node);
+            counts.set(node.id, (counts.get(node.id) || 0) + 1);
+        }
+    }
+    if (data.active) {
+        for (const node of data.nodes) {
+            if ((counts.get(node.id) || 0) !== node.population) {
+                rejectArchive();
+            }
+        }
+    }
+    return members;
+}
+
+function validateHistory(points) {
+    if (!Array.isArray(points)) {
+        rejectArchive();
+    }
+    let last = -1;
+    for (const point of points) {
+        if (!isCount(point.tick) || point.tick <= last || !isCount(point.living)) {
+            rejectArchive();
+        }
+        last = point.tick;
+    }
+}
+
 class LineageTracker {
     constructor(env) { this.env = env; this.session = 0; this.clear(); }
     clear() {
@@ -61,8 +235,7 @@ class LineageTracker {
         const node = this.nodeFor(parent) || this.pollen.nodeFor(pollenOrigin,parent); if (!node) return;
         try {
             let form = node;
-            // Engine species identity is retained for unchanged bodies, including brain/rate drift.
-            // Only anatomical mutations require a body key; never serialize ordinary births.
+            // Unchanged offspring share their parent's species, so they need no body snapshot.
             if (child.species !== parent.species) {
                 const key = Snapshot.bodyKey(child);
                 if (key !== node.shapeKey) form = this.branches.get(node.id + ':' + key) || this.record(child,node);
@@ -85,15 +258,26 @@ class LineageTracker {
         if (!this.living) this.updateFate();
     }
     updateFate() {
-        if(!this.active||!this.nodes.length)return;
-        if(this.living){this.extinctionTick=null;this.pollen.dormant=false;return;}
-        if(this.pollen.pending){
-            this.extinctionTick=null;
-            if(!this.pollen.dormant)this.research.event('line-dormant',null,'No living members; tracked pollen remains');
-            this.pollen.dormant=true;
-        }else{
-            if(this.extinctionTick===null){this.extinctionTick=this.tick();this.research.event('line-extinction',null,'No living members or tracked pollen remain');this.sample(this.tick(),true);}
-            this.pollen.dormant=false;
+        if (!this.active || !this.nodes.length) return;
+        if (this.living) {
+            this.extinctionTick = null;
+            this.pollen.dormant = false;
+            return;
+        }
+        // Pollen can produce descendants after the last living member dies.
+        if (this.pollen.pending) {
+            this.extinctionTick = null;
+            if (!this.pollen.dormant) {
+                this.research.event('line-dormant', null, 'No living members; tracked pollen remains');
+            }
+            this.pollen.dormant = true;
+        } else {
+            if (this.extinctionTick === null) {
+                this.extinctionTick = this.tick();
+                this.research.event('line-extinction', null, 'No living members or tracked pollen remain');
+                this.sample(this.tick(), true);
+            }
+            this.pollen.dormant = false;
         }
     }
     point(history,tick,living) {
@@ -111,7 +295,13 @@ class LineageTracker {
     }
     stop(reason = 'stopped by user') {
         if (!this.active) return;
-        this.sample(this.tick(),true); this.research.environment.sample(this.tick()); this.research.event('stop',null,reason); this.active=false; this.endedAtTick=this.tick(); this.endReason=reason; this.revision++;
+        this.sample(this.tick(), true);
+        this.research.environment.sample(this.tick());
+        this.research.event('stop', null, reason);
+        this.active = false;
+        this.endedAtTick = this.tick();
+        this.endReason = reason;
+        this.revision++;
     }
     intervene(reason) { if (this.active) {this.interventions.push({tick:this.tick(),reason});this.research.event('intervention',null,reason);} }
     exportNode(id) {
@@ -119,68 +309,50 @@ class LineageTracker {
         return Snapshot.exportOrganism(this.genomes[node.genomeId],node.species);
     }
     serialize() {
-        const archive={version:4,pollen:this.pollen.serialize()}; for (const key of fields) archive[key]=this[key]; archive.research=this.research.serialize(); return Snapshot.copy(archive);
+        const archive = {version: 4, pollen: this.pollen.serialize()};
+        for (const key of fields) archive[key] = this[key];
+        archive.research = this.research.serialize();
+        return Snapshot.copy(archive);
     }
     load(raw, tags = new Map()) {
-        this.clear(); if (!raw) return;
+        this.clear();
+        if (!raw) {
+            return;
+        }
         try {
-            const data = raw.version === 1 ? migrate(raw,this.tick()) : Snapshot.copy(raw);
-            const fail=()=>{throw new Error('Invalid species lineage archive');};
-            const uint=v=>Number.isSafeInteger(v)&&v>=0;
-            const history=h=>{
-                if (!Array.isArray(h)) fail(); let last=-1;
-                for (const p of h) { if (!uint(p.tick)||p.tick<=last||!uint(p.living)) fail(); last=p.tick; }
-            };
-            if (![2,3,4].includes(data.version) || !['species','legacy-subset'].includes(data.scope) || !Array.isArray(data.nodes) || !Array.isArray(data.genomes) || !Array.isArray(data.interventions)) fail();
-            for (const k of ['session','nextId','initialPopulation','totalBirths','living','peak']) if (!uint(data[k])) fail();
-            if (!data.session || !data.nextId || data.peak<data.living || data.peak>data.initialPopulation+data.totalBirths || typeof data.active!=='boolean' || typeof data.complete!=='boolean') fail();
-            for (const k of ['peakTick','extinctionTick','endedAtTick']) if (data[k]!==null&&!uint(data[k])) fail();
-            if (data.active && data.endedAtTick!==null) fail();
-            for (const i of data.interventions) if (!uint(i.tick)||typeof i.reason!=='string') fail();
-            data.genomes.forEach(Snapshot.validate); history(data.history);
-            const ids=new Map(), branches=new Map(); let living=0, births=0, founders=0;
-            for (const n of data.nodes) {
-                for (const k of ['id','mutationDepth','firstSeenTick','genomeId','population','founders','totalBirths','totalDeaths','peak','peakTick','extinctionCount']) if (!uint(n[k])) fail();
-                if (!n.id||ids.has(n.id)||!data.genomes[n.genomeId]||n.shapeKey!==Snapshot.bodyKey(data.genomes[n.genomeId])||n.peak<n.population||n.peak>n.founders+n.totalBirths||n.founders+n.totalBirths-n.totalDeaths!==n.population) fail();
-                if (n.extinctionTick!==null && (!uint(n.extinctionTick)||n.extinctionTick<n.firstSeenTick||n.population!==0)) fail();
-                if (n.parentId===null) { if (n.id!==data.rootId||n.mutationDepth!==0||ids.size) fail(); }
-                else {
-                    const p=ids.get(n.parentId), key=n.parentId+':'+n.shapeKey;
-                    if (!p||n.mutationDepth!==p.mutationDepth+1||n.firstSeenTick<p.firstSeenTick||p.shapeKey===n.shapeKey||branches.has(key)||n.founders) fail();
-                    branches.set(key,n);
+            const data = raw.version === 1 ? migrate(raw, this.tick()) : Snapshot.copy(raw);
+            validateHeader(data);
+            const {ids: ids, branches: branches} = readForms(data);
+            const members = readMembers(data, ids, this.env.organisms, tags);
+            for (const key of fields) {
+                this[key] = data[key];
+            }
+            this.byId = ids;
+            this.branches = branches;
+            this.members = members;
+            this.children = new Map(this.nodes.map(n => [n.id, []]));
+            this.liveForms = new Set(this.nodes.filter(n => n.population > 0).map(n => n.id));
+            for (const n of this.nodes) {
+                if (n.parentId !== null) {
+                    this.children.get(n.parentId).push(n.id);
                 }
-                if ((n.population===0)!==(n.extinctionTick!==null)) fail();
-                history(n.history); ids.set(n.id,n); living+=n.population; births+=n.totalBirths; founders+=n.founders;
             }
-            if (living!==data.living||births!==data.totalBirths||founders!==data.initialPopulation||data.nextId<=data.nodes.reduce((max,n)=>Math.max(max,n.id),0)) fail();
-            if (data.nodes.length ? !ids.has(data.rootId) : (data.rootId!==null||data.active||data.genomes.length||data.history.length)) fail();
-            const pollen=data.pollen||{food:0,carriers:0};
-            if(!uint(pollen.food)||!uint(pollen.carriers)||data.version===4&&!data.pollen)fail();
-            const pending=pollen.food+pollen.carriers;
-            if (data.extinctionTick!==null && (living!==0||pending||!data.nodes.length)) fail();
-            if (data.nodes.length && (!living && !pending && data.extinctionTick===null || data.peakTick===null || !data.active && data.endedAtTick===null)) fail();
-            const members=new WeakMap(), counts=new Map();
-            if (data.active) for (const org of this.env.organisms) {
-                const tag=tags.get(org); if (!tag||tag.id==null) continue;
-                const n=ids.get(tag.id);
-                if (tag.session!==data.session||!n||!org.living||Snapshot.bodyKey(org)!==n.shapeKey) fail();
-                members.set(org,n); counts.set(n.id,(counts.get(n.id)||0)+1);
+            if (data.version >= 3 && !data.research) {
+                rejectArchive();
             }
-            if (data.active) for (const n of data.nodes) if ((counts.get(n.id)||0)!==n.population) fail();
-            for (const key of fields) this[key]=data[key];
-            this.byId=ids; this.branches=branches; this.members=members;
-            this.children=new Map(this.nodes.map(n=>[n.id,[]]));
-            this.liveForms=new Set(this.nodes.filter(n=>n.population>0).map(n=>n.id));
-            for (const n of this.nodes) if (n.parentId!==null) this.children.get(n.parentId).push(n.id);
-            if (data.version>=3 && !data.research) fail();
             this.pollen.load(data.pollen);
-            if(data.version<4 && this.pollen.pending && !this.living)this.extinctionTick=null;
-            this.research.load(data.research,tags);
+            if (data.version < 4 && this.pollen.pending && !this.living) {
+                this.extinctionTick = null;
+            }
+            this.research.load(data.research, tags);
             this.revision++;
-        } catch(e) {
-            this.clear(); this.complete=false; this.error='Lineage archive rejected; world loaded without tracking. '+e.message;
+        } catch (e) {
+            this.clear();
+            this.complete = false;
+            this.error = 'Lineage archive rejected; world loaded without tracking. ' + e.message;
         }
     }
+
 }
 module.exports=LineageTracker;
 // TADIWA EDIT END: observational species populations and visible mutation branches

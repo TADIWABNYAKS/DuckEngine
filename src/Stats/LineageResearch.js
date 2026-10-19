@@ -18,6 +18,9 @@ function settings() {
     }
     return result;
 }
+function rejectArchive() { throw new Error('Invalid research archive'); }
+function isCount(value) { return Number.isSafeInteger(value) && value >= 0; }
+
 class LineageResearch {
     constructor(tracker) {
         this.environment=new Environment(tracker);
@@ -60,24 +63,39 @@ class LineageResearch {
         const next=Seasons.name(tick);
         if(this.season!==next){this.event('season',null,`Season: ${this.season||'not recorded'} → ${next}`);this.season=next;}
     }
-    count(nodeId,kind,cause) {
-        const bucket=Math.max(0,Math.ceil((this.tracker.tick()-this.fromTick)/100)-1);
-        for (const id of [0,nodeId]) {
-            const m=this.metric(id);m[kind]++;
-            if (cause) m.causes[cause]++;
-            let b=m.index.get(bucket);
-            if (!b) {b={index:bucket,births:0,deaths:0};m.index.set(bucket,b);m.buckets.push(b);}
-            b[kind]++;
+    count(nodeId, kind, cause) {
+        const bucket = Math.max(0, Math.ceil((this.tracker.tick() - this.fromTick) / 100) - 1);
+        // Record each event for both the whole line (ID 0) and its body form.
+        for (const id of [0, nodeId]) {
+            const metric = this.metric(id);
+            metric[kind]++;
+            if (cause) metric.causes[cause]++;
+            let counts = metric.index.get(bucket);
+            if (!counts) {
+                counts = {index: bucket, births: 0, deaths: 0};
+                metric.index.set(bucket, counts);
+                metric.buckets.push(counts);
+            }
+            counts[kind]++;
         }
     }
-    rates(id=0) {
-        const now=this.tracker.active?this.tracker.tick():this.tracker.endedAtTick;
-        if (this.fromTick===null||now===null) return null;
-        const elapsed=Math.max(0,now-this.fromTick),duration=Math.min(100,elapsed);
-        const index=elapsed>=100?Math.floor(elapsed/100)-1:0;
-        const b=this.metricMap.get(id)?.index.get(index)||{births:0,deaths:0};
-        return {from:this.fromTick+index*100,to:this.fromTick+index*100+duration,duration,
-            births:b.births,deaths:b.deaths,birthRate:duration?b.births*100/duration:null,deathRate:duration?b.deaths*100/duration:null};
+    rates(id = 0) {
+        const now = this.tracker.active ? this.tracker.tick() : this.tracker.endedAtTick;
+        if (this.fromTick === null || now === null) return null;
+        const elapsed = Math.max(0, now - this.fromTick);
+        const duration = Math.min(100, elapsed);
+        // Use the last completed window, or the partial first window while starting up.
+        const index = elapsed >= 100 ? Math.floor(elapsed / 100) - 1 : 0;
+        const counts = this.metricMap.get(id)?.index.get(index) || {births: 0, deaths: 0};
+        return {
+            from: this.fromTick + index * 100,
+            to: this.fromTick + index * 100 + duration,
+            duration,
+            births: counts.births,
+            deaths: counts.deaths,
+            birthRate: duration ? counts.births * 100 / duration : null,
+            deathRate: duration ? counts.deaths * 100 / duration : null
+        };
     }
     join(org,node,parent=null,knownInherited=false,founder=false) {
         this.metric(node.id);
@@ -113,62 +131,205 @@ class LineageResearch {
         return S.copy({fromTick:this.fromTick,events:this.events,variants:this.variants,controls:this.controls,season:this.season,environment:this.environment.serialize(),
             metrics:this.metrics.map(({index,...m})=>m)});
     }
-    load(raw,tags) {
-        const t=this.tracker;
+    load(raw, tags) {
+        const tracker = this.tracker;
         if (!raw) {
-            if (!t.nodes.length) return;
+            if (!tracker.nodes.length) {
+                return;
+            }
             this.begin(true);
-            for(const n of t.nodes)this.metric(n.id);
-            if(t.active)for(const org of t.env.organisms){const n=t.nodeFor(org);if(n)this.join(org,n,null,false,true);}
+            for (const node of tracker.nodes) {
+                this.metric(node.id);
+            }
+            if (tracker.active) {
+                for (const org of tracker.env.organisms) {
+                    const node = tracker.nodeFor(org);
+                    if (node) {
+                        this.join(org, node, null, false, true);
+                    }
+                }
+            }
             this.environment.load(null);
             return;
         }
-        const d=S.copy(raw),fail=()=>{throw new Error('Invalid research archive');},uint=n=>Number.isSafeInteger(n)&&n>=0;
-        if(d.fromTick!==null&&!uint(d.fromTick)||!Array.isArray(d.events)||!Array.isArray(d.variants)||!Array.isArray(d.metrics)||!d.controls||typeof d.controls!=='object')fail();
-        if(d.fromTick===null&&(d.events.length||d.variants.length||d.metrics.length))fail();
-        if(d.season!=null&&!['Off','Summer','Winter'].includes(d.season))fail();
-        this.fromTick=d.fromTick;this.controls=d.controls;this.season=d.season==null?Seasons.name(t.env.total_ticks):d.season;
-        for(const m of d.metrics){
-            if(!uint(m.id)||m.id!==0&&!t.byId.has(m.id)||this.metricMap.has(m.id)||!uint(m.births)||!uint(m.deaths)||!m.causes||!Array.isArray(m.buckets))fail();
-            if(CAUSES.some(c=>!uint(m.causes[c]))||Object.values(m.causes).some(c=>!uint(c))||Object.values(m.causes).reduce((sum,c)=>sum+c,0)>m.deaths)fail();
-            m.causes=Object.fromEntries(CAUSES.map(c=>[c,m.causes[c]]));
-            m.index=new Map();let previous=-1,births=0,deaths=0;
-            for(const b of m.buckets){if(!uint(b.index)||b.index<=previous||!uint(b.births)||!uint(b.deaths))fail();previous=b.index;m.index.set(b.index,b);births+=b.births;deaths+=b.deaths;}
-            if(births!==m.births||deaths!==m.deaths)fail();
-            this.metrics.push(m);this.metricMap.set(m.id,m);
+        const data = S.copy(raw);
+        if (
+            (data.fromTick !== null && !isCount(data.fromTick)) ||
+            !Array.isArray(data.events) ||
+            !Array.isArray(data.variants) ||
+            !Array.isArray(data.metrics) ||
+            !data.controls ||
+            typeof data.controls !== 'object'
+        ) {
+            rejectArchive();
         }
-        if(d.fromTick!==null){
-            const global=this.metricMap.get(0);if(!global||t.nodes.some(n=>!this.metricMap.has(n.id)))fail();
-            for(const key of ['births','deaths'])if(global[key]!==this.metrics.filter(m=>m.id!==0).reduce((sum,m)=>sum+m[key],0))fail();
-            if(global.births>t.totalBirths||global.deaths>t.initialPopulation+t.totalBirths-t.living)fail();
+        if (data.fromTick === null && (data.events.length || data.variants.length || data.metrics.length)) {
+            rejectArchive();
         }
-        for(const v of d.variants){
-            const n=t.byId.get(v.nodeId);S.validate(v.snapshot);
-            if(v.id!==this.variants.length+1||!n||!uint(v.firstSeenTick)||v.firstSeenTick<d.fromTick||!activeBrain(v.snapshot)||S.bodyKey(v.snapshot)!==n.shapeKey||brainKey(v.snapshot)!==v.key)fail();
-            if(v.parentVariantId!==null&&!this.byVariant.has(v.parentVariantId))fail();
-            for(const key of ['population','founders','births','deaths'])if(!uint(v[key]))fail();
-            if(v.founders+v.births-v.deaths!==v.population||this.variantKeys.has(v.nodeId+':'+v.key))fail();
-            this.variants.push(v);this.byVariant.set(v.id,v);this.variantKeys.set(v.nodeId+':'+v.key,v);
-            if(!this.formVariants.has(v.nodeId))this.formVariants.set(v.nodeId,[]);this.formVariants.get(v.nodeId).push(v);
+        if (data.season != null && !['Off', 'Summer', 'Winter'].includes(data.season)) {
+            rejectArchive();
         }
-        let last=-1;
-        for(const e of d.events){
-            if(e.id!==this.events.length+1||!uint(e.tick)||e.tick<last||e.tick<d.fromTick||!EVENT_TYPES.includes(e.type)||typeof e.detail!=='string'||!uint(e.count)||!e.count||e.nodeId!==null&&!t.byId.has(e.nodeId))fail();
-            for(const key of ['variantId','fromVariantId'])if(e[key]!=null&&!this.byVariant.has(e[key]))fail();
-            last=e.tick;this.events.push(e);
-        }
-        const counts=new Map();
-        if(t.active)for(const org of t.env.organisms){
-            const n=t.nodeFor(org),tag=tags.get(org);if(!n)continue;
-            if(activeBrain(org)){
-                const v=this.byVariant.get(tag&&tag.brain);
-                if(!v||v.nodeId!==n.id||v.key!==brainKey(org))fail();
-                this.members.set(org,v);counts.set(v.id,(counts.get(v.id)||0)+1);
-            }else if(tag&&tag.brain!=null)fail();
-        }
-        if(t.active)for(const v of this.variants)if((counts.get(v.id)||0)!==v.population)fail();
-        this.environment.load(d.environment);
+        this.fromTick = data.fromTick;
+        this.controls = data.controls;
+        this.season = data.season == null ? Seasons.name(tracker.env.total_ticks) : data.season;
+        this.loadMetrics(data);
+        this.loadVariants(data);
+        this.loadEvents(data);
+        this.restoreMembers(tags);
+        this.environment.load(data.environment);
     }
+    loadMetrics(data) {
+        const tracker = this.tracker;
+        for (const metric of data.metrics) {
+            if (
+                !isCount(metric.id) ||
+                (metric.id !== 0 && !tracker.byId.has(metric.id)) ||
+                this.metricMap.has(metric.id) ||
+                !isCount(metric.births) ||
+                !isCount(metric.deaths) ||
+                !metric.causes ||
+                !Array.isArray(metric.buckets)
+            ) {
+                rejectArchive();
+            }
+            if (
+                CAUSES.some(c => !isCount(metric.causes[c])) ||
+                Object.values(metric.causes).some(c => !isCount(c)) ||
+                Object.values(metric.causes).reduce((sum, c) => sum + c, 0) > metric.deaths
+            ) {
+                rejectArchive();
+            }
+            metric.causes = Object.fromEntries(CAUSES.map(c => [c, metric.causes[c]]));
+            metric.index = new Map();
+            let previous = -1, births = 0, deaths = 0;
+            for (const bucket of metric.buckets) {
+                if (!isCount(bucket.index) || bucket.index <= previous || !isCount(bucket.births) || !isCount(bucket.deaths)) {
+                    rejectArchive();
+                }
+                previous = bucket.index;
+                metric.index.set(bucket.index, bucket);
+                births += bucket.births;
+                deaths += bucket.deaths;
+            }
+            if (births !== metric.births || deaths !== metric.deaths) {
+                rejectArchive();
+            }
+            this.metrics.push(metric);
+            this.metricMap.set(metric.id, metric);
+        }
+        if (data.fromTick !== null) {
+            const totals = this.metricMap.get(0);
+            if (!totals || tracker.nodes.some(node => !this.metricMap.has(node.id))) {
+                rejectArchive();
+            }
+            for (const key of ['births', 'deaths']) {
+                if (totals[key] !== this.metrics.filter(metric => metric.id !== 0).reduce((sum, metric) => sum + metric[key], 0)) {
+                    rejectArchive();
+                }
+            }
+            if (
+                totals.births > tracker.totalBirths ||
+                totals.deaths > tracker.initialPopulation + tracker.totalBirths - tracker.living
+            ) {
+                rejectArchive();
+            }
+        }
+    }
+    loadVariants(data) {
+        const tracker = this.tracker;
+        for (const variant of data.variants) {
+            const node = tracker.byId.get(variant.nodeId);
+            S.validate(variant.snapshot);
+            if (
+                variant.id !== this.variants.length + 1 ||
+                !node ||
+                !isCount(variant.firstSeenTick) ||
+                variant.firstSeenTick < data.fromTick ||
+                !activeBrain(variant.snapshot) ||
+                S.bodyKey(variant.snapshot) !== node.shapeKey ||
+                brainKey(variant.snapshot) !== variant.key
+            ) {
+                rejectArchive();
+            }
+            if (variant.parentVariantId !== null && !this.byVariant.has(variant.parentVariantId)) {
+                rejectArchive();
+            }
+            for (const key of ['population', 'founders', 'births', 'deaths']) {
+                if (!isCount(variant[key])) {
+                    rejectArchive();
+                }
+            }
+            if (
+                variant.founders + variant.births - variant.deaths !== variant.population ||
+                this.variantKeys.has(variant.nodeId + ':' + variant.key)
+            ) {
+                rejectArchive();
+            }
+            this.variants.push(variant);
+            this.byVariant.set(variant.id, variant);
+            this.variantKeys.set(variant.nodeId + ':' + variant.key, variant);
+            if (!this.formVariants.has(variant.nodeId)) {
+                this.formVariants.set(variant.nodeId, []);
+            }
+            this.formVariants.get(variant.nodeId).push(variant);
+        }
+    }
+    loadEvents(data) {
+        const tracker = this.tracker;
+        let last = -1;
+        for (const event of data.events) {
+            if (
+                event.id !== this.events.length + 1 ||
+                !isCount(event.tick) ||
+                event.tick < last ||
+                event.tick < data.fromTick ||
+                !EVENT_TYPES.includes(event.type) ||
+                typeof event.detail !== 'string' ||
+                !isCount(event.count) ||
+                !event.count ||
+                (event.nodeId !== null && !tracker.byId.has(event.nodeId))
+            ) {
+                rejectArchive();
+            }
+            for (const key of ['variantId', 'fromVariantId']) {
+                if (event[key] != null && !this.byVariant.has(event[key])) {
+                    rejectArchive();
+                }
+            }
+            last = event.tick;
+            this.events.push(event);
+        }
+    }
+    restoreMembers(tags) {
+        const tracker = this.tracker;
+        const counts = new Map();
+        if (tracker.active) {
+            for (const org of tracker.env.organisms) {
+                const node = tracker.nodeFor(org), tag = tags.get(org);
+                if (!node) {
+                    continue;
+                }
+                if (activeBrain(org)) {
+                    const variant = this.byVariant.get(tag && tag.brain);
+                    if (!variant || variant.nodeId !== node.id || variant.key !== brainKey(org)) {
+                        rejectArchive();
+                    }
+                    this.members.set(org, variant);
+                    counts.set(variant.id, (counts.get(variant.id) || 0) + 1);
+                } else if (tag && tag.brain != null) {
+                    rejectArchive();
+                }
+            }
+        }
+        if (tracker.active) {
+            for (const variant of this.variants) {
+                if ((counts.get(variant.id) || 0) !== variant.population) {
+                    rejectArchive();
+                }
+            }
+        }
+    }
+
 }
 LineageResearch.activeBrain=activeBrain;
 module.exports=LineageResearch;
