@@ -17,7 +17,7 @@ function exportOrganism(snapshot, name) {
         species_name: name || 'Recorded ancestor', living: true, lifetime: 0,
         food_collected: 0, damage: 0, rotation: 0, direction: 2,
         move_count: 0, ignore_brain_for: 0
-    }); // Position and lineage identity deliberately absent; editor keeps its center.
+    }); // Omit position so the editor places the organism at its centre.
 }
 function compare(parent, child) {
     if (!parent) return {body: ['Root form; earlier ancestry unknown'], brain: ['Root brain; earlier ancestry unknown']};
@@ -36,7 +36,7 @@ function compare(parent, child) {
     if (canonical(parent.brain.decisions) !== canonical(child.brain.decisions)) brain.push('Decision maps changed (see complete maps below)');
     return {body: body.length ? body : ['Body unchanged'], brain: brain.length ? brain : ['Brain unchanged']};
 }
-// The key describes appearance only; representative cell/eye execution order stays intact.
+// Sort a copy for body matching; cell order still matters in the saved organism.
 function bodyKey(form) {
     return JSON.stringify(form.anatomy.cells.map(c => [c.loc_col, c.loc_row, c.state.name,
         c.state.name === 'eye' ? c.direction : null]).sort((a,b) => a[0]-b[0] || a[1]-b[1] || a[2].localeCompare(b[2])));

@@ -60,24 +60,39 @@ class LineageResearch {
         const next=Seasons.name(tick);
         if(this.season!==next){this.event('season',null,`Season: ${this.season||'not recorded'} → ${next}`);this.season=next;}
     }
-    count(nodeId,kind,cause) {
-        const bucket=Math.max(0,Math.ceil((this.tracker.tick()-this.fromTick)/100)-1);
-        for (const id of [0,nodeId]) {
-            const m=this.metric(id);m[kind]++;
-            if (cause) m.causes[cause]++;
-            let b=m.index.get(bucket);
-            if (!b) {b={index:bucket,births:0,deaths:0};m.index.set(bucket,b);m.buckets.push(b);}
-            b[kind]++;
+    count(nodeId, kind, cause) {
+        const bucket = Math.max(0, Math.ceil((this.tracker.tick() - this.fromTick) / 100) - 1);
+        // Record each event for both the whole line (ID 0) and its body form.
+        for (const id of [0, nodeId]) {
+            const metric = this.metric(id);
+            metric[kind]++;
+            if (cause) metric.causes[cause]++;
+            let counts = metric.index.get(bucket);
+            if (!counts) {
+                counts = {index: bucket, births: 0, deaths: 0};
+                metric.index.set(bucket, counts);
+                metric.buckets.push(counts);
+            }
+            counts[kind]++;
         }
     }
-    rates(id=0) {
-        const now=this.tracker.active?this.tracker.tick():this.tracker.endedAtTick;
-        if (this.fromTick===null||now===null) return null;
-        const elapsed=Math.max(0,now-this.fromTick),duration=Math.min(100,elapsed);
-        const index=elapsed>=100?Math.floor(elapsed/100)-1:0;
-        const b=this.metricMap.get(id)?.index.get(index)||{births:0,deaths:0};
-        return {from:this.fromTick+index*100,to:this.fromTick+index*100+duration,duration,
-            births:b.births,deaths:b.deaths,birthRate:duration?b.births*100/duration:null,deathRate:duration?b.deaths*100/duration:null};
+    rates(id = 0) {
+        const now = this.tracker.active ? this.tracker.tick() : this.tracker.endedAtTick;
+        if (this.fromTick === null || now === null) return null;
+        const elapsed = Math.max(0, now - this.fromTick);
+        const duration = Math.min(100, elapsed);
+        // Use the last completed window, or the partial first window while starting up.
+        const index = elapsed >= 100 ? Math.floor(elapsed / 100) - 1 : 0;
+        const counts = this.metricMap.get(id)?.index.get(index) || {births: 0, deaths: 0};
+        return {
+            from: this.fromTick + index * 100,
+            to: this.fromTick + index * 100 + duration,
+            duration,
+            births: counts.births,
+            deaths: counts.deaths,
+            birthRate: duration ? counts.births * 100 / duration : null,
+            deathRate: duration ? counts.deaths * 100 / duration : null
+        };
     }
     join(org,node,parent=null,knownInherited=false,founder=false) {
         this.metric(node.id);

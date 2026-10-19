@@ -66,7 +66,7 @@ class LineagePanel {
         this.inspector = el('aside', undefined, 'lineage-inspector'); this.inspector.setAttribute('aria-label', 'Selected body form');
         const body = el('div', undefined, 'lineage-body'); body.append(this.tree, this.inspector);
         this.panel.append(header, help, actions, this.message, this.summary, this.insights.rates, this.insights.chartControls, this.history, this.historyCaption, this.environmentChart.element, this.insights.events, navigation, body);
-        // Prevent existing simulation hotkeys from interpreting text entry in this panel.
+        // Keep typing in the tracker from triggering simulation shortcuts.
         this.panel.addEventListener('keydown', e => e.stopPropagation());
         document.body.append(this.panel);
         const track = button(undefined, () => this.track()); track.id = 'track-descendants';
@@ -210,7 +210,7 @@ class LineagePanel {
         const first = data[0].tick, last = Math.max(data[data.length - 1].tick, t.research.events.at(-1)?.tick || 0), max = Math.max(1, t.peak);
         this.chartRange = {first, last};
         ctx.strokeStyle = '#246c52'; ctx.beginPath();
-        // Each horizontal bin retains its min/max; full history stays in the archive.
+        // Keep the lowest and highest population per pixel so short spikes stay visible.
         const bins = new Map();
         for (const d of data) {
             const x = Math.round(35 + 760 * (d.tick - first) / Math.max(1, last - first));
@@ -222,7 +222,7 @@ class LineagePanel {
         if (selected) {
             ctx.strokeStyle = '#7230DB'; ctx.beginPath();
             const points = selected.history;
-            // Bound canvas work to horizontal columns, retaining range within each column.
+            // Use the same per-pixel range for the selected form.
             const formBins = new Map();
             for (const d of points) {
                 const x = Math.round(35 + 760 * (d.tick-first)/Math.max(1,last-first));

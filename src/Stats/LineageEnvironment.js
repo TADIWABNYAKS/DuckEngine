@@ -7,21 +7,35 @@ class LineageEnvironment {
     }
     sample(tick) {
         const env = this.tracker.env;
-        let food = 0, plants = 0, pollenFood = 0, pollenCarriers = 0; const counts = new Map();
-        for (const col of env.grid_map.grid) for (const cell of col) if (cell.state === Cells.food) {food++;if(cell.pollen)pollenFood++;}
+        let food = 0, plants = 0, pollenFood = 0, pollenCarriers = 0;
+        const counts = new Map();
+        for (const column of env.grid_map.grid) {
+            for (const cell of column) {
+                if (cell.state !== Cells.food) continue;
+                food++;
+                if (cell.pollen) pollenFood++;
+            }
+        }
         for (const org of env.organisms) {
-            if(org.living&&org.anatomy.is_mover&&org.pollen)pollenCarriers++;
+            if (org.living && org.anatomy.is_mover && org.pollen) pollenCarriers++;
+            // Plant counts include stationary producers only.
             if (!org.living || !org.anatomy.is_producer || org.anatomy.is_mover) continue;
             const name = org.species && org.species.name || '(unnamed)';
             let species = this.byName.get(name);
             if (!species) {
-                species = {id:this.species.length + 1, name, firstSeenTick:tick};
-                this.species.push(species); this.byName.set(name, species);
+                species = {id: this.species.length + 1, name, firstSeenTick: tick};
+                this.species.push(species);
+                this.byName.set(name, species);
             }
-            plants++; counts.set(species.id, (counts.get(species.id) || 0) + 1);
+            plants++;
+            counts.set(species.id, (counts.get(species.id) || 0) + 1);
         }
         if (this.fromTick === null) this.fromTick = tick;
-        const point = {tick, food, plants, pollenFood, pollenCarriers, season:this.tracker.research?.season||null, bySpecies:[...counts].sort((a,b)=>a[0]-b[0])};
+        const point = {
+            tick, food, plants, pollenFood, pollenCarriers,
+            season: this.tracker.research?.season || null,
+            bySpecies: [...counts].sort((a, b) => a[0] - b[0])
+        };
         if (this.history.at(-1)?.tick === tick) this.history[this.history.length - 1] = point;
         else this.history.push(point);
     }

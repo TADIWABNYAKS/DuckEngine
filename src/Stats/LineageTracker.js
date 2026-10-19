@@ -61,8 +61,7 @@ class LineageTracker {
         const node = this.nodeFor(parent) || this.pollen.nodeFor(pollenOrigin,parent); if (!node) return;
         try {
             let form = node;
-            // Engine species identity is retained for unchanged bodies, including brain/rate drift.
-            // Only anatomical mutations require a body key; never serialize ordinary births.
+            // Unchanged offspring share their parent's species, so they need no body snapshot.
             if (child.species !== parent.species) {
                 const key = Snapshot.bodyKey(child);
                 if (key !== node.shapeKey) form = this.branches.get(node.id + ':' + key) || this.record(child,node);
@@ -85,15 +84,26 @@ class LineageTracker {
         if (!this.living) this.updateFate();
     }
     updateFate() {
-        if(!this.active||!this.nodes.length)return;
-        if(this.living){this.extinctionTick=null;this.pollen.dormant=false;return;}
-        if(this.pollen.pending){
-            this.extinctionTick=null;
-            if(!this.pollen.dormant)this.research.event('line-dormant',null,'No living members; tracked pollen remains');
-            this.pollen.dormant=true;
-        }else{
-            if(this.extinctionTick===null){this.extinctionTick=this.tick();this.research.event('line-extinction',null,'No living members or tracked pollen remain');this.sample(this.tick(),true);}
-            this.pollen.dormant=false;
+        if (!this.active || !this.nodes.length) return;
+        if (this.living) {
+            this.extinctionTick = null;
+            this.pollen.dormant = false;
+            return;
+        }
+        // Pollen can produce descendants after the last living member dies.
+        if (this.pollen.pending) {
+            this.extinctionTick = null;
+            if (!this.pollen.dormant) {
+                this.research.event('line-dormant', null, 'No living members; tracked pollen remains');
+            }
+            this.pollen.dormant = true;
+        } else {
+            if (this.extinctionTick === null) {
+                this.extinctionTick = this.tick();
+                this.research.event('line-extinction', null, 'No living members or tracked pollen remain');
+                this.sample(this.tick(), true);
+            }
+            this.pollen.dormant = false;
         }
     }
     point(history,tick,living) {
@@ -111,7 +121,13 @@ class LineageTracker {
     }
     stop(reason = 'stopped by user') {
         if (!this.active) return;
-        this.sample(this.tick(),true); this.research.environment.sample(this.tick()); this.research.event('stop',null,reason); this.active=false; this.endedAtTick=this.tick(); this.endReason=reason; this.revision++;
+        this.sample(this.tick(), true);
+        this.research.environment.sample(this.tick());
+        this.research.event('stop', null, reason);
+        this.active = false;
+        this.endedAtTick = this.tick();
+        this.endReason = reason;
+        this.revision++;
     }
     intervene(reason) { if (this.active) {this.interventions.push({tick:this.tick(),reason});this.research.event('intervention',null,reason);} }
     exportNode(id) {
@@ -119,7 +135,10 @@ class LineageTracker {
         return Snapshot.exportOrganism(this.genomes[node.genomeId],node.species);
     }
     serialize() {
-        const archive={version:4,pollen:this.pollen.serialize()}; for (const key of fields) archive[key]=this[key]; archive.research=this.research.serialize(); return Snapshot.copy(archive);
+        const archive = {version: 4, pollen: this.pollen.serialize()};
+        for (const key of fields) archive[key] = this[key];
+        archive.research = this.research.serialize();
+        return Snapshot.copy(archive);
     }
     load(raw, tags = new Map()) {
         this.clear(); if (!raw) return;

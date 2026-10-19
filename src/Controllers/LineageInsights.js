@@ -29,11 +29,24 @@ class LineageInsights {
         };
     }
     research(){return this.panel.env.lineage.research;}
-    filtered(){
-        const r=this.research(),key=`${r.eventRevision}:${r.events.length}:${this.filter.value}`;
-        if(this.filterArchive===r && this.filterKey===key)return this.filteredEvents;
-        this.filterArchive=r;this.filterKey=key;
-        this.filteredEvents=r.events.filter(e=>this.filter.value==='all'||(this.filter.value==='body'?e.type==='body-mutation':this.filter.value==='brain'?e.type.startsWith('brain'):this.filter.value==='extinction'?e.type.endsWith('extinction')||['line-dormant','line-revival'].includes(e.type):this.filter.value==='season'?e.type==='season':['settings','intervention','stop','upgrade'].includes(e.type)));
+    filtered() {
+        const research = this.research();
+        const filter = this.filter.value;
+        const key = research.eventRevision + ':' + research.events.length + ':' + filter;
+        if (this.filterArchive === research && this.filterKey === key) return this.filteredEvents;
+        this.filterArchive = research;
+        this.filterKey = key;
+        this.filteredEvents = research.events.filter(event => {
+            switch (filter) {
+                case 'all': return true;
+                case 'body': return event.type === 'body-mutation';
+                case 'brain': return event.type.startsWith('brain');
+                case 'extinction':
+                    return event.type.endsWith('extinction') || ['line-dormant', 'line-revival'].includes(event.type);
+                case 'season': return event.type === 'season';
+                default: return ['settings', 'intervention', 'stop', 'upgrade'].includes(event.type);
+            }
+        });
         return this.filteredEvents;
     }
     rateText(id,label){
