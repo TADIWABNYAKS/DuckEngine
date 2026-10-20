@@ -213,6 +213,24 @@ the state of the grid cells it stands on and resets them to "empty"
 when it moves away, which would erase a habitat stored as a state.
 
 Rules:
-    - an organism with more than habitat_max_cells cells can't enter
-    - a small organism with ALL of its cells on habitat tiles is "hidden"
-    - a hidden organism can't be harmed or seen by bigger organisms
+- an organism with more than habitat_max_cells cells can't enter
+- a small organism with ALL of its cells on habitat tiles is "hidden"
+- a hidden organism can't be harmed or seen by bigger organisms
+
+## Food Decay and Seasons
+
+Seasons make the world alternate between summer and winter, and food decay lets uneaten food rot back into empty space. Both only change food: they never move, harm or remove organisms, so they cannot directly decide whether a species survives. Both are off by default and are found under Seasons & Food Decay in Evolution Controls.
+
+The world starts in summer and switches season every 3000 ticks (default, can be changed). The current season and the ticks left until it changes are shown under the FPS readout in the Simulation Speed panel.
+
+- Summer: producers make food 1.5× as often, and food rots 2× as fast.
+- Winter: producers make food 0.5× as often, and food rots 0.5× as fast.
+
+Each food cell has a chance per tick (default 0.1%) of turning back into an empty cell. When seasons are on, this chance is multiplied by the summer or winter decay multiplier. Only food cells are affected.
+
+### Files changed
+- `src/Environments/Seasons.js` (new): works out the current season and its production and decay multipliers.
+- `src/Hyperparameters.js`: adds the season and decay settings and their defaults.
+- `src/Organism/Cell/BodyCells/ProducerCell.js`: scales food production by the season.
+- `src/Environments/WorldEnvironment.js`: adds `decayFood()`, which rots food each tick when decay is on.
+- `src/Controllers/ControlPanel.js` and `dist/index.html`: the Seasons & Food Decay controls and the season display.
