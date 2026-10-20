@@ -31,53 +31,7 @@ To load custom creations (found in `/dist/assets`), you must have a simple web s
 - Dev mode (better error messages): `npm run build-dev` 
 
 
-# How the Simulation Works
-## The Environment
-The environment is a simple grid system made up of cells, which at every tick have a certain type. The environment is populated by organisms, which are structures of multiple cells.
-
-## Cells
-A cell can be one of the following types.
-### Independent Cells
-Independent cells are not part of organisms. 
-- Empty - Dark blue, inert.
-- Food - Grayish-blue, provides nourishment for organisms.
-- Wall - Gray, blocks organisms movement and reproduction.
-### Organism Cells
-Organism Cells are only found in organisms, and cannot exist on their own in the grid.
-- Mouth - Orange, eats food in directly adjacent cells.
-- Producer - Green, randomly generates food in directly adjacent empty cells.
-- Mover - Light blue, allows the organism to move and rotate randomly.
-- Killer - Red, harms organisms in directly adjacent cells (besides itself).
-- Armor - Purple, negates the effects of killer cells.
-- Eye - Light purple with a slit, allows the organism to see and move intelligently. See further description below.
-
-## Organisms
-Organisms are structures of cells that eat food, reproduce, and die.
-When an organism dies, every cell in the grid that was occupied by a cell in its body will be changed to food.
-Their lifespan is calculated by multiplying the number of cells they have by the hyperparameter `Lifespan Multiplier`. They will survive for that many ticks unless killed by another organism.
-When touched by a killer cell, an organism will take damage. Once it has taken as much damage as it has cells in its body, it will die. If the hyperparameter `One touch kill` is on, an organism will immediatly die when touched by a killer cell.
-
-## Reproduction
-Once an organism has eaten as much food as it has cells in its body, it will attempt to reproduce. 
-First, offspring is formed by cloning the current organism and possibly mutating it (see below).
-The offspring birth location is then chosen a certain number of cells in a random direction (up, down, left, right). This number is calculated programmatically such that it is far enough away that it can't intersect with it's parent.
-Additionally, a random value between 1 and 3 is added to the location to introduce a little variance.
-Reproduction can fail if the offspring attempts to occupy non-empty cells, like other organisms and food. If reproduction fails, the food required to produce a child is wasted.
-
-## Mutation
-Offspring can mutate their anatomies in 3 different ways: change a cell, lose a cell, or add a cell. Changing a cell sets a random cell to a random type. Losing a cell removes a random cell. Note that this can result in organisms with "gaps" and cells disconnected from the rest of its body. I consider this a feature, not a bug.
-To add a cell the organism first selects a cell it already has in its body, then grows a new cell with a random type in a location adjacent to the selected cell.
-
-If an organism mutates, there is a 10% chance that mutation will alter the movement patterns of the organism (see below).
-
-## Movement and Rotation
-Organisms with mover cells (light blue) are permitted to move freely about the grid. Only a single mover cell is required and adding more doesn't do anything. By default, an organism selects a random direction and moves one cell per tick in that direction for a certain number of ticks. This number is called "Move range", and it can mutate over time.
-
-Organims can also rotate around a central pivot cell. This cell can never be removed by mutation, though it can change type. Movers rotate randomly when they change direction, and their rotation is not necessarily the same as their movement direction, ie, they aren't always facing the direction they are moving. Offspring of all organisms (including static ones) rotate randomly during reproduction. This rotation can be toggled in the simulation controls.
-
-## Eyes and Brains
-Any organism can evolve eyes, but when an organism has both eyes and mover cells it is given a brain. The eye, unlike other cells, has a direction, which is denoted by the direction of the slit in the cell. It "looks" forward in this direction and "sees" the first non-empty cell within a certain range. It checks the type of the cell and informs the brain, which then decideds how to move. The brain can either ignore (keep moving in whatever direction), chase (move towards the observed cell), or retreat (move in the opposite direction of the observed cell). The brain maps different observed cell types to different actions. For instance, the brain will chase when it sees food and retreat when it sees a killer cell. These behaviors can mutate over time. 
-
+# Added Features: Digesting Ducks 
 
 ## Pollen-assisted plant reproduction
 
@@ -173,9 +127,6 @@ evolutionary suicide still needs evidence from experimental comparisons.
 
 ### Files and implementation structure
 
-Data lives in `src/Stats`, controls in `src/Controllers` and previews in
-`src/Rendering`. Paths below are relative to the repository root.
-
 #### Added tracker modules
 
 | File | Responsibility |
@@ -196,7 +147,7 @@ Data lives in `src/Stats`, controls in `src/Controllers` and previews in
 | File | Changes/additions |
 | --- | --- |
 | `src/Engine.js` | Creates and updates the lineage interface. |
-| `src/Environments/WorldEnvironment.js` | Owns the tracker; samples completed ticks; handles removal/reset boundaries; saves/restores archives and live identities; accounts for pollen removed from the world. |
+| `src/Environments/WorldEnvironment.js` | Owns the tracker; samples completed ticks; handles removal/reset ; saves/restores archives and live identities; accounts for pollen removed from the world. |
 | `src/Organism/Organism.js` | Reports successful births and actual deaths; connects pollen births to their donor lineage; prevents tracking identity from leaking into standalone organism imports/exports. |
 | `src/Controllers/ControlPanel.js` | Retains the selected live organism for tracking, observes control changes and supports world downloads containing large archives. |
 | `src/Organism/Cell/BodyCells/ProducerCell.js` | Registers successfully created pollen packets with the tracker. |
@@ -217,6 +168,18 @@ Rules:
 - a small organism with ALL of its cells on habitat tiles is "hidden"
 - a hidden organism can't be harmed or seen by bigger organisms
 
+## Changes made to the original code
+
+Eight existing JavaScript files were modified; no new source files were added, and no HTML or CSS files were changed.
+
+- *src/Environments/WorldEnvironment.js* — Added habitat storage, the default size limit, habitat-management and hiding checks, reset and grid-resizing behaviour, plus save/load support. Habitat tiles outside the grid are removed after resizing.
+- *src/Environments/Environment.js* — Added safe default habitat methods for environments that do not use habitats.
+- *src/Rendering/Renderer.js* — Added the translucent green habitat tint.
+- *src/Organism/Organism.js* — Added a habitat-blocking check to isClear(), covering movement, rotation, reproduction, and editor placement. An organism's current cells are exempt from the blocking check so painting habitat under a large organism does not immediately trap it.
+- *src/Organism/Cell/BodyCells/KillerCell.js* — Prevented larger predators from harming prey that is fully hidden in a habitat.
+- *src/Controllers/ControlModes.js* — Added the HabitatDrop control mode.
+- *src/Controllers/EnvironmentController.js* — Added habitat painting and erasing using the existing brush.
+- *src/Controllers/ControlPanel.js* — Added the leaf button, mode-switching behaviour, and the *E* keyboard shortcut.
 ## Food Decay and Seasons
 
 Seasons make the world alternate between summer and winter, and food decay lets uneaten food rot back into empty space. Both only change food: they never move, harm or remove organisms, so they cannot directly decide whether a species survives. Both are off by default and are found under Seasons & Food Decay in Evolution Controls.
