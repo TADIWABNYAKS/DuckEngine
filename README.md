@@ -112,6 +112,27 @@ have no stored pollen and use the new defaults when their controls are applied.
 Set pollen probability to 0 and plant lifespan factor to 1 for baseline mechanics;
 existing loads will still finish their attempts.
 
+### Changes made
+
+- Added pollen-bearing food from stationary producers, with distinct colours in
+  every theme and normal food nutrition and perception.
+- Added delayed, single-attempt reproduction beside pollen carriers, using the
+  source plant's inherited traits and existing mutation and placement rules.
+  Pollen remains viable after the source plant dies.
+- Added adjustable pollen production probability, carrier delay, reproduction
+  probability, and plant lifespan factor. Defaults are 10%, 50 ticks, 25%, and
+  0.75 respectively; stationary plants therefore have 25% shorter lifespans.
+- Extended world saves to preserve pollen food, carrier timers, source identity,
+  and species records, including extinct sources. Older saves remain loadable,
+  and species renaming preserves outstanding pollen references.
+- Shared offspring creation and birth registration between ordinary and pollen
+  reproduction. Ordinary food-based reproduction remains available: setting
+  pollen reproduction probability to 0% disables only births through carriers.
+- Restricted pollen acquisition and reproduction through carriers to organisms
+  with mover cells. Stationary organisms still receive normal food nutrition.
+- Added compatibility handling to discard pollen stored on stationary organisms
+  when loading saves created before this restriction.
+
 ## Species lineage tracking (Tadiwanashe)
 
 The tracker follows a species and its descendants as mutations change their names.
@@ -183,36 +204,6 @@ Data lives in `src/Stats`, controls in `src/Controllers` and previews in
 | `src/Hyperparameters.js` | Restores season defaults for older saves without replacing explicitly supplied settings. |
 | `dist/css/style.css` | Styles the lineage panel, tree, graphs and comparisons; keeps editor toolbar buttons at their original size. |
 | `dist/index.html` | Updates asset references so the browser loads the integrated interface assets. |
-
-
-## Change log
-
-This log records changes made to this codebase. Add future entries
-below with the date, behaviour changed, and any compatibility implications.
-
-### 2026-10-12 — Pollen-assisted reproduction (Henning)
-
-- Added pollen-bearing food from stationary producers, with distinct colours in
-  every theme and normal food nutrition and perception.
-- Added delayed, single-attempt reproduction beside pollen carriers, using the
-  source plant's inherited traits and existing mutation and placement rules.
-  Pollen remains viable after the source plant dies.
-- Added adjustable pollen production probability, carrier delay, reproduction
-  probability, and plant lifespan factor. Defaults are 10%, 50 ticks, 25%, and
-  0.75 respectively; stationary plants therefore have 25% shorter lifespans.
-- Extended world saves to preserve pollen food, carrier timers, source identity,
-  and species records, including extinct sources. Older saves remain loadable,
-  and species renaming preserves outstanding pollen references.
-- Shared offspring creation and birth registration between ordinary and pollen
-  reproduction. Ordinary food-based reproduction remains available: setting
-  pollen reproduction probability to 0% disables only births through carriers.
-
-### 2026-10-12 — Mover-only pollen carriers (Henning)
-
-- Restricted pollen acquisition and reproduction through carriers to organisms
-  with mover cells. Stationary organisms still receive normal food nutrition.
-- Added compatibility handling to discard pollen stored on stationary organisms
-  when loading saves created before this restriction.
 
 # Habitats 
 HABITATS: sheltered ground where small organisms can hide.
